@@ -13,7 +13,7 @@
                  join attr_key k on v.attr_key_id = k.id
         where k.is_deleted = 0
           and v.is_deleted = 0
-          and v.id in (select attr_key_id
+          and k.id in (select attr_key_id
                        from room_attr_value
                        where room_attr_value.is_deleted = 0
                          and room_id = #{id})

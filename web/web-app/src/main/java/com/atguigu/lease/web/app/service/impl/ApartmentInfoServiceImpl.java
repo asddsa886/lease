@@ -7,6 +7,7 @@ import com.atguigu.lease.model.enums.ItemType;
 import com.atguigu.lease.web.app.mapper.*;
 import com.atguigu.lease.web.app.service.ApartmentInfoService;
 import com.atguigu.lease.web.app.vo.apartment.ApartmentDetailVo;
+import com.atguigu.lease.web.app.vo.apartment.ApartmentItemVo;
 import com.atguigu.lease.web.app.vo.graph.GraphVo;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.beans.BeanUtils;
@@ -58,6 +59,24 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
 
 
         return apartmentDetailVo;
+    }
+
+    @Override
+    public ApartmentItemVo getItemById(Long id) {
+        ApartmentInfo apartmentInfo = apartmentInfoMapper.selectById(id);
+        List<GraphVo> graphVos = graphInfoMapper.selectListByItemTypeAndId(ItemType.APARTMENT, id);
+        List<LabelInfo> labelInfos = labelInfoMapper.selectListByApartmentId(id);
+        List<FacilityInfo> facilityInfos = facilityInfoMapper.selectListByApartmentId(id);
+        BigDecimal min = roomInfoMapper.selectMinRentByApartmentId(id);
+
+        ApartmentItemVo apartmentItemVo = new ApartmentItemVo();
+        BeanUtils.copyProperties(apartmentInfo, apartmentItemVo);
+        apartmentItemVo.setLabelInfoList(labelInfos);
+        apartmentItemVo.setGraphVoList(graphVos);
+        apartmentItemVo.setMinRent(min);
+
+
+        return apartmentItemVo;
     }
 }
 

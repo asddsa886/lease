@@ -3,8 +3,12 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.atguigu.lease.web.app.mapper.AttrValueMapper">
-
-    <select id="selectListByRoomId" resultType="com.atguigu.lease.web.app.vo.attr.AttrValueVo">
+    <resultMap id="AttrValueVoMap" type="com.atguigu.lease.web.app.vo.attr.AttrValueVo">
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="attr_key_name" property="attrKeyName"/>
+    </resultMap>
+    <select id="selectListByRoomId" resultMap="AttrValueVoMap">
         select v.id,
         v.name,
         v.attr_key_id,

@@ -1,9 +1,13 @@
 package com.atguigu.lease.web.app.service.impl;
 
+import com.atguigu.lease.common.login.LoginUserHolder;
 import com.atguigu.lease.model.entity.*;
 import com.atguigu.lease.model.enums.ItemType;
 import com.atguigu.lease.web.app.mapper.*;
+import com.atguigu.lease.web.app.service.BrowsingHistoryService;
 import com.atguigu.lease.web.app.service.RoomInfoService;
+import com.atguigu.lease.web.app.vo.apartment.ApartmentDetailVo;
+import com.atguigu.lease.web.app.vo.apartment.ApartmentItemVo;
 import com.atguigu.lease.web.app.vo.attr.AttrValueVo;
 import com.atguigu.lease.web.app.vo.graph.GraphVo;
 import com.atguigu.lease.web.app.vo.room.RoomDetailVo;
@@ -17,6 +21,7 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -53,6 +58,9 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
     @Autowired
     private LeaseTermMapper leaseTermMapper;
 
+    @Autowired
+    private BrowsingHistoryService browsingHistoryService;
+
     @Override
     public IPage<RoomItemVo> pageItem(Page<RoomItemVo> page, RoomQueryVo queryVo) {
         return roomInfoMapper.pageItem(page,queryVo);
@@ -63,6 +71,17 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
         RoomInfo roomInfo = roomInfoMapper.selectById(id);
         //2.查询所属公寓信息
         ApartmentInfo apartmentInfo = apartmentInfoMapper.selectById(roomInfo.getApartmentId());
+
+        List<GraphVo> graphVoA = graphInfoMapper.selectListByItemTypeAndId(ItemType.APARTMENT, roomInfo.getApartmentId());
+        List<LabelInfo> labelInfoA = labelInfoMapper.selectListByApartmentId(roomInfo.getApartmentId());
+        BigDecimal minA = roomInfoMapper.selectMinRentByApartmentId(roomInfo.getApartmentId());
+
+        ApartmentItemVo apartmentItemVo = new  ApartmentItemVo();
+        BeanUtils.copyProperties(apartmentInfo, apartmentItemVo);
+        apartmentItemVo.setLabelInfoList(labelInfoA);
+        apartmentItemVo.setGraphVoList(graphVoA);
+        apartmentItemVo.setMinRent(minA);
+        System.out.println(apartmentItemVo);
 
         //3.查询graphInfoList
         List<GraphVo> graphVoList = graphInfoMapper.selectListByItemTypeAndId(ItemType.ROOM, id);
@@ -84,12 +103,16 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
 
         RoomDetailVo roomDetailVo = new RoomDetailVo();
         BeanUtils.copyProperties(roomInfo, roomDetailVo);
+        roomDetailVo.setApartmentItemVo(apartmentItemVo);
         roomDetailVo.setGraphVoList(graphVoList);
         roomDetailVo.setAttrValueVoList(attrValueVos);
         roomDetailVo.setFacilityInfoList(facilityInfos);
         roomDetailVo.setLabelInfoList(labelInfoList);
         roomDetailVo.setPaymentTypeList(paymentTypeList);
         roomDetailVo.setLeaseTermList(leaseTermList);
+
+        //  保存浏览历史 异步处理
+        browsingHistoryService.saveHistory(LoginUserHolder.get().getId(),id);
 
         return roomDetailVo;
     }

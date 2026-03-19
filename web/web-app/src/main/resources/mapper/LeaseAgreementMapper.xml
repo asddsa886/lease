@@ -3,5 +3,75 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.atguigu.lease.web.app.mapper.LeaseAgreementMapper">
+       <resultMap id="Agg" type="com.atguigu.lease.web.app.vo.agreement.AgreementItemVo" autoMapping="true">
+              <id column="id" property="id"></id>
+              <collection property="roomGraphVoList" ofType="com.atguigu.lease.web.app.vo.graph.GraphVo" autoMapping="true"></collection>
+       </resultMap>
 
+    <resultMap id="AgreementDetailVoMap" type="com.atguigu.lease.web.app.vo.agreement.AgreementDetailVo" autoMapping="true">
+        <id column="id" property="id"/>
+        <result property="status" column="lease_status"></result>
+
+        <!-- ✅ 正确:使用collection映射List -->
+        <collection property="roomGraphVoList" ofType="com.atguigu.lease.web.app.vo.graph.GraphVo">
+            <result column="rname" property="name"/>
+            <result column="rurl" property="url"/>
+        </collection>
+
+        <!-- 如果还有公寓图片列表 -->
+        <collection property="apartmentGraphVoList" ofType="com.atguigu.lease.web.app.vo.graph.GraphVo">
+            <result column="aname" property="name"/>
+            <result column="aurl" property="url"/>
+        </collection>
+    </resultMap>
+
+    <select id="listItemByPhone" resultMap="Agg">
+        select la.id,
+               la.lease_start_date,
+               la.lease_end_date,
+               la.rent,
+               la.payment_type_id,
+               la.status lease_status,
+               la.source_type,
+               ai.name apartment_name,
+               ri.room_number,
+               gi.name,
+               gi.url
+        from lease_agreement la
+                 left join room_info ri on la.room_id = ri.id and ri.is_deleted = 0
+                 left join apartment_info ai on la.apartment_id = ai.id and ai.is_deleted = 0
+                 left join graph_info gi on gi.item_id = ri.id and gi.item_type = 2 and gi.is_deleted = 0
+        where la.is_deleted = 0
+        and la.phone = #{phone}
+    </select>
+       <select id="getDetailById" resultMap="AgreementDetailVoMap">
+           select la.id,
+                  la.phone,
+                  la.name,
+                  la.identification_number,
+                  la.apartment_id,
+                  la.room_id,
+                  la.lease_start_date,
+                  la.lease_end_date,
+                  la.lease_term_id,
+                  la.rent,
+                  la.deposit,
+                  la.status lease_status,
+                  la.source_type,
+                  la.additional_info,
+                  ai.name   apartment_name,
+                  ri.room_number,
+                  gia.name  aname,
+                  gia.url   aurl,
+                  gir.name  rname,
+                  gir.url   rurl
+           from lease_agreement la
+                    left join room_info ri on la.room_id = ri.id and ri.is_deleted = 0
+                    left join apartment_info ai on la.apartment_id = ai.id and ai.is_deleted = 0
+                    left join graph_info gir on gir.item_id = ri.id and gir.item_type = 2 and gir.is_deleted = 0
+                    left join graph_info gia on gia.item_type = 1 and gia.item_id = ai.id and gia.is_deleted = 0
+
+           where la.is_deleted = 0
+             and la.id = #{id}
+       </select>
 </mapper>

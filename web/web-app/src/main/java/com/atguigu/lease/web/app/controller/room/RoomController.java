@@ -34,8 +34,10 @@ public class RoomController {
     @Operation(summary = "根据id获取房间的详细信息")
     @GetMapping("getDetailById")
     public Result<RoomDetailVo> getDetailById(@RequestParam Long id) {
-        RoomDetailVo result = roomInfoService.getDetailById(id);
-        return Result.ok(result);
+//        System.out.println("接收到房间详情请求,ID: " + id);
+        RoomDetailVo roomInfo = roomInfoService.getDetailById(id);
+//        System.out.println("返回数据: " + roomInfo);
+        return Result.ok(roomInfo);
     }
 
     @Operation(summary = "根据公寓id分页查询房间列表")

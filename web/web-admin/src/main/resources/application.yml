@@ -16,6 +16,12 @@ spring:
       pool-name: SPHHikariPool # 连接池名称
   jackson:
     time-zone: GMT+8
+  servlet:
+    multipart:
+      max-file-size: 10MB        # 图片场景
+      # max-file-size: 100MB     # 视频场景
+      # max-file-size: 500MB     # 大文件场景
+      max-request-size: 50MB     # 应该比max-file-size大
 
   data:
     redis:

@@ -121,16 +121,16 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
         //1.保存新的graphInfoList
         List<GraphVo> graphVoList = roomSubmitVo.getGraphVoList();
         if (CollectionUtils.isNotEmpty(graphVoList)) {
-            List<GraphInfo> graphVoList1 = new ArrayList<>();
+            List<GraphInfo> graphInfoList  = new ArrayList<>();
             for (GraphVo graphVo : graphVoList) {
                 GraphInfo graphInfo = new GraphInfo();
                 graphInfo.setItemType(ItemType.ROOM);
                 graphInfo.setItemId(roomSubmitVo.getId());
                 graphInfo.setName(graphVo.getName());
                 graphInfo.setUrl(graphVo.getUrl());
-                graphVoList.add(graphVo);
+                graphInfoList.add(graphInfo);
             }
-            graphInfoService.saveBatch(graphVoList1);
+            graphInfoService.saveBatch(graphInfoList);
         }
 
         //2.保存新的roomAttrValueList
@@ -217,6 +217,7 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
         List<LeaseTerm> leaseTermList = leaseTermMapper.selectListByRoomId(id);
 
         RoomDetailVo roomDetailVo = new RoomDetailVo();
+        BeanUtils.copyProperties(roomInfo, roomDetailVo);
         roomDetailVo.setApartmentInfo(apartmentInfo);
         roomDetailVo.setGraphVoList(graphVoList);
         roomDetailVo.setAttrValueVoList(attrValueVos);

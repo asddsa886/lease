@@ -91,7 +91,7 @@ public class LoginServiceImpl implements LoginService {
         //删除redis的数据
         stringRedisTemplate.delete(key);
 
-        return JwtUtil.creatToken(userInfo.getId(),userInfo.getNickname());
+        return JwtUtil.creatToken(userInfo.getId(),userInfo.getPhone());
     }
 
     @Override
