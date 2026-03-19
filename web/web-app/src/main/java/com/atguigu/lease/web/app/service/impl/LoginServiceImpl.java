@@ -10,10 +10,10 @@ import com.atguigu.lease.model.enums.BaseStatus;
 import com.atguigu.lease.web.app.mapper.UserInfoMapper;
 import com.atguigu.lease.web.app.service.LoginService;
 import com.atguigu.lease.web.app.service.SmsService;
-import com.atguigu.lease.web.app.service.UserInfoService;
 import com.atguigu.lease.web.app.vo.user.LoginVo;
 import com.atguigu.lease.web.app.vo.user.UserInfoVo;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import java.util.concurrent.TimeUnit;
 
 @Service
+@Slf4j
 public class LoginServiceImpl implements LoginService {
 
     @Autowired
@@ -33,7 +34,7 @@ public class LoginServiceImpl implements LoginService {
     @Override
     public void getCode(String phone) {
         String code = CodeUtil.getRandomCode(6);
-        String key = RedisConstant. APP_LOGIN_PREFIX + phone;
+        String key = RedisConstant.APP_LOGIN_PREFIX + phone;
 
         Boolean b = stringRedisTemplate.hasKey(key);
         if (b) {
@@ -44,11 +45,10 @@ public class LoginServiceImpl implements LoginService {
         }
 
         smsService.sendCode(phone, code);
-        stringRedisTemplate.opsForValue().set(key,code,RedisConstant.APP_LOGIN_CODE_TTL_SEC, TimeUnit.SECONDS);
+        stringRedisTemplate.opsForValue().set(key, code, RedisConstant.APP_LOGIN_CODE_TTL_SEC, TimeUnit.SECONDS);
 
-        //Todo
-        System.out.println("code:" + code);
-
+        // 安全考虑：不打印验证码，仅记录发送动作（必要时可在 DEBUG 下排查）
+        log.debug("Login SMS code sent, phone={}", phone);
     }
 
     @Override
@@ -60,7 +60,7 @@ public class LoginServiceImpl implements LoginService {
             throw new LeaseException(ResultCodeEnum.APP_LOGIN_CODE_EMPTY);
         }
 
-        String key = RedisConstant. APP_LOGIN_PREFIX + loginVo.getPhone();
+        String key = RedisConstant.APP_LOGIN_PREFIX + loginVo.getPhone();
 
 
         String code = stringRedisTemplate.opsForValue().get(key);

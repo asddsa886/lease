@@ -42,8 +42,4 @@ public class JwtUtil {
         }
     }
 
-    public static void main(String[] args) {
-        String s = creatToken(1L, "赵文博");
-        System.out.println(s);
-    }
 }

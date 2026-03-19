@@ -1,10 +1,14 @@
 package com.atguigu.lease.web.app.service.impl;
 
+import com.atguigu.lease.common.exception.LeaseException;
+import com.atguigu.lease.common.result.ResultCodeEnum;
 import com.atguigu.lease.model.entity.PaymentType;
 import com.atguigu.lease.web.app.mapper.PaymentTypeMapper;
 import com.atguigu.lease.web.app.service.PaymentTypeService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 /**
 * @author liubo
@@ -13,8 +17,15 @@ import org.springframework.stereotype.Service;
 */
 @Service
 public class PaymentTypeServiceImpl extends ServiceImpl<PaymentTypeMapper, PaymentType>
-    implements PaymentTypeService{
+    implements PaymentTypeService {
 
+    @Override
+    public List<PaymentType> listByRoomId(Long roomId) {
+        if (roomId == null) {
+            throw new LeaseException(ResultCodeEnum.PARAM_ERROR);
+        }
+        return baseMapper.selectListByRoomId(roomId);
+    }
 }
 
 

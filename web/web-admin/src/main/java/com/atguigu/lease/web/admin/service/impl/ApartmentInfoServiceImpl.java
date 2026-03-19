@@ -20,6 +20,7 @@ import org.checkerframework.checker.units.qual.A;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -66,6 +67,7 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
 
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void saveOrUpdateApartment(ApartmentSubmitVo apartmentSubmitVo) {
         boolean isUpdate = apartmentSubmitVo.getId() != null;
         super.saveOrUpdate(apartmentSubmitVo);
@@ -179,6 +181,7 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void removeApartmentById(Long id) {
         LambdaQueryWrapper<RoomInfo> apartmentInfoLambdaQueryWrapper = new LambdaQueryWrapper<>();
         apartmentInfoLambdaQueryWrapper.eq(RoomInfo::getApartmentId, id);

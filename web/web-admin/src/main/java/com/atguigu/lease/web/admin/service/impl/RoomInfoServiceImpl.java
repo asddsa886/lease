@@ -17,6 +17,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -79,6 +80,7 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void saveOrUpdateRoom(RoomSubmitVo roomSubmitVo) {
         boolean isUpdate = roomSubmitVo.getId() != null;
         super.saveOrUpdate(roomSubmitVo);
@@ -231,12 +233,13 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void removeRoomById(Long id) {
         super.removeById(id);
 
         LambdaQueryWrapper<GraphInfo> graphQueryWrapper = new LambdaQueryWrapper<>();
         graphQueryWrapper.eq(GraphInfo::getItemId, id);
-        graphQueryWrapper.eq(GraphInfo::getItemId,ItemType.ROOM);
+        graphQueryWrapper.eq(GraphInfo::getItemType, ItemType.ROOM);
         graphInfoService.remove(graphQueryWrapper);
 
         //3.删除attrValueList

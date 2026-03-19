@@ -1,5 +1,8 @@
 package com.atguigu.lease.web.app.service.impl;
 
+import com.atguigu.lease.common.exception.LeaseException;
+import com.atguigu.lease.common.login.LoginUserHolder;
+import com.atguigu.lease.common.result.ResultCodeEnum;
 import com.atguigu.lease.model.entity.*;
 import com.atguigu.lease.model.enums.ItemType;
 import com.atguigu.lease.web.app.mapper.*;
@@ -8,7 +11,6 @@ import com.atguigu.lease.web.app.vo.agreement.AgreementDetailVo;
 import com.atguigu.lease.web.app.vo.agreement.AgreementItemVo;
 import com.atguigu.lease.web.app.vo.graph.GraphVo;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import org.checkerframework.checker.units.qual.A;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -52,31 +54,38 @@ public class LeaseAgreementServiceImpl extends ServiceImpl<LeaseAgreementMapper,
     public AgreementDetailVo getDetailById(Long id) {
         LeaseAgreement leaseAgreement = leaseAgreementMapper.selectById(id);
         if (leaseAgreement == null) {
-            return null;
+            throw new LeaseException(ResultCodeEnum.DATA_ERROR);
+        }
+
+        // IDOR/越权防护：只允许查看自己的租约
+        String currentUserPhone = LoginUserHolder.get().getUsername();
+        if (currentUserPhone == null || !currentUserPhone.equals(leaseAgreement.getPhone())) {
+            throw new LeaseException(ResultCodeEnum.ILLEGAL_REQUEST);
         }
 
         ApartmentInfo apartmentInfo = apartmentInfoMapper.selectById(leaseAgreement.getApartmentId());
-
         RoomInfo roomInfo = roomInfoMapper.selectById(leaseAgreement.getRoomId());
+        PaymentType paymentType = paymentTypeMapper.selectById(leaseAgreement.getPaymentTypeId());
+        LeaseTerm leaseTerm = leaseTermMapper.selectById(leaseAgreement.getLeaseTermId());
 
-        List<GraphVo> roomGraphVolist = graphInfoMapper.selectListByItemTypeAndId(ItemType.ROOM, leaseAgreement.getRoomId());
+        if (apartmentInfo == null || roomInfo == null || paymentType == null || leaseTerm == null) {
+            throw new LeaseException(ResultCodeEnum.DATA_ERROR);
+        }
+
+        List<GraphVo> roomGraphVoList = graphInfoMapper.selectListByItemTypeAndId(ItemType.ROOM, leaseAgreement.getRoomId());
         List<GraphVo> apartmentGraphVoList = graphInfoMapper.selectListByItemTypeAndId(ItemType.APARTMENT, leaseAgreement.getApartmentId());
 
-        PaymentType paymentType = paymentTypeMapper.selectById(leaseAgreement.getPaymentTypeId());
-
-        LeaseTerm leaseTerm = leaseTermMapper.selectById(leaseAgreement.getLeaseTermId());
         AgreementDetailVo agreementDetailVo = new AgreementDetailVo();
         BeanUtils.copyProperties(leaseAgreement, agreementDetailVo);
         agreementDetailVo.setApartmentName(apartmentInfo.getName());
         agreementDetailVo.setRoomNumber(roomInfo.getRoomNumber());
         agreementDetailVo.setApartmentGraphVoList(apartmentGraphVoList);
-        agreementDetailVo.setRoomGraphVoList(roomGraphVolist);
+        agreementDetailVo.setRoomGraphVoList(roomGraphVoList);
         agreementDetailVo.setPaymentTypeName(paymentType.getName());
         agreementDetailVo.setLeaseTermMonthCount(leaseTerm.getMonthCount());
         agreementDetailVo.setLeaseTermUnit(leaseTerm.getUnit());
 
         return agreementDetailVo;
-
     }
 }
 

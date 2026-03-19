@@ -24,10 +24,10 @@ public class BrowsingHistoryController {
 
     @Operation(summary = "获取浏览历史")
     @GetMapping("pageItem")
-    private Result<IPage<HistoryItemVo>> page(@RequestParam long current, @RequestParam long size) {
+    public Result<IPage<HistoryItemVo>> page(@RequestParam long current, @RequestParam long size) {
         Page<HistoryItemVo> page = new Page<>(current, size);
         Long userId = LoginUserHolder.get().getId();
-        IPage<HistoryItemVo> result = browsingHistoryService.pageItem(page,userId);
+        IPage<HistoryItemVo> result = browsingHistoryService.pageItem(page, userId);
         return Result.ok(result);
     }
 }

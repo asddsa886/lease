@@ -76,12 +76,12 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
         List<LabelInfo> labelInfoA = labelInfoMapper.selectListByApartmentId(roomInfo.getApartmentId());
         BigDecimal minA = roomInfoMapper.selectMinRentByApartmentId(roomInfo.getApartmentId());
 
-        ApartmentItemVo apartmentItemVo = new  ApartmentItemVo();
+        ApartmentItemVo apartmentItemVo = new ApartmentItemVo();
         BeanUtils.copyProperties(apartmentInfo, apartmentItemVo);
         apartmentItemVo.setLabelInfoList(labelInfoA);
         apartmentItemVo.setGraphVoList(graphVoA);
         apartmentItemVo.setMinRent(minA);
-        System.out.println(apartmentItemVo);
+        log.debug("Assembled apartmentItemVo for roomDetail, roomId={}, apartmentId={}", id, roomInfo.getApartmentId());
 
         //3.查询graphInfoList
         List<GraphVo> graphVoList = graphInfoMapper.selectListByItemTypeAndId(ItemType.ROOM, id);

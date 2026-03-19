@@ -1,7 +1,9 @@
 package com.atguigu.lease.web.app.controller.payment;
 
 
+import com.atguigu.lease.common.exception.LeaseException;
 import com.atguigu.lease.common.result.Result;
+import com.atguigu.lease.common.result.ResultCodeEnum;
 import com.atguigu.lease.model.entity.PaymentType;
 import com.atguigu.lease.web.app.service.PaymentTypeService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -24,8 +26,12 @@ public class PaymentTypeController {
 
     @Operation(summary = "根据房间id获取可选支付方式列表")
     @GetMapping("listByRoomId")
-    public Result<List<PaymentType>> list(@RequestParam Long id) {
-        return Result.ok();
+    public Result<List<PaymentType>> listByRoomId(@RequestParam Long id) {
+        if (id == null) {
+            throw new LeaseException(ResultCodeEnum.PARAM_ERROR);
+        }
+        List<PaymentType> list = paymentTypeService.listByRoomId(id);
+        return Result.ok(list);
     }
 
     @Operation(summary = "获取全部支付方式列表")

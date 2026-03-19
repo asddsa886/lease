@@ -3,24 +3,34 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.atguigu.lease.web.app.mapper.BrowsingHistoryMapper">
-    
-    <resultMap id="HistoryItemVoMap" type="com.atguigu.lease.web.app.vo.history.HistoryItemVo" autoMapping="true">
-        <id property="id" column="id"></id>
 
-        <result column="room_id" property="roomId"></result>
-        
-        <collection property="roomGraphVoList" ofType="com.atguigu.lease.web.app.vo.graph.GraphVo" select="selectGraphVoListByRoomId" column="room_id"></collection>
-        
+    <!--
+      分页正确性优化（关键）：
+      - pageItem 不联表 graph_info（一对多会导致行膨胀，Page 的 limit/offset 被污染，分页不准）
+      - 图片列表 roomGraphVoList 由 Service 层“批量查询 + 聚合回填”（把 N+1 变为 1 次批量查询）
+    -->
+    <resultMap id="HistoryItemVoMap" type="com.atguigu.lease.web.app.vo.history.HistoryItemVo" autoMapping="true">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="roomId" column="room_id"/>
+        <result property="browseTime" column="browse_time"/>
+
+        <result property="roomNumber" column="room_number"/>
+        <result property="rent" column="rent"/>
+        <result property="apartmentName" column="apartment_name"/>
+        <result property="provinceName" column="province_name"/>
+        <result property="cityName" column="city_name"/>
+        <result property="districtName" column="district_name"/>
     </resultMap>
 
-    <select id="pageItem" resultType="com.atguigu.lease.web.app.vo.history.HistoryItemVo">
+    <select id="pageItem" resultMap="HistoryItemVoMap">
         select bh.id,
                bh.user_id,
                bh.room_id,
                bh.browse_time,
                ri.room_number,
                ri.rent,
-               ai.name apartment_name,
+               ai.name as apartment_name,
                ai.district_name,
                ai.city_name,
                ai.province_name
@@ -28,17 +38,8 @@
                  left join room_info ri on bh.room_id = ri.id and ri.is_deleted = 0
                  left join apartment_info ai on ai.id = ri.apartment_id and ai.is_deleted = 0
         where bh.is_deleted = 0
-          and user_id = #{userId}
+          and bh.user_id = #{userId}
         order by bh.browse_time desc
-
     </select>
 
-    <select id="selectGraphVoListByRoomId" resultType="com.atguigu.lease.web.app.vo.graph.GraphVo">
-        select url,
-               name
-        from graph_info
-        where is_deleted = 0
-          and item_type = 1
-          and item_id = #{id}
-    </select>
 </mapper>

@@ -13,13 +13,8 @@ import java.util.Date;
 @Component
 public class ScheduleTasks {
 
-//    @Scheduled(cron = "* * * * * *")
-//    public void test(){
-//        System.out.println(new Date());
-//
-//    }
-    @Autowired
-    private LeaseAgreementService leaseAgreementService;
+     @Autowired
+     private LeaseAgreementService leaseAgreementService;
 
     @Scheduled(cron = "0 0 0 * * *")
     public void checkLeaseStatus(){

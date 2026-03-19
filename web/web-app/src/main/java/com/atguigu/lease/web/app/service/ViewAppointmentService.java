@@ -12,5 +12,11 @@ import java.util.List;
 * @createDate 2023-07-26 11:12:39
 */
 public interface ViewAppointmentService extends IService<ViewAppointment> {
+
     List<AppointmentItemVo> getDetailByUserId(Long id);
+
+    /**
+     * 安全加固：只允许当前用户创建/修改自己的预约，禁止越权修改他人预约、禁止篡改状态/归属字段。
+     */
+    void saveOrUpdateForCurrentUser(ViewAppointment viewAppointment, Long currentUserId);
 }
