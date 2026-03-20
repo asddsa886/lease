@@ -21,11 +21,13 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
  
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
  
 @Tag(name = "看房预约信息")
 @RestController
@@ -33,6 +35,11 @@ import java.util.List;
 @RequestMapping("/app/appointment")
 public class ViewAppointmentController {
  
+    /**
+     * P0-稳定：预约提交幂等 key 前缀（短窗口去重，防止双击/重试导致重复写入）
+     */
+    private static final String APPOINTMENT_IDEMPOTENCY_KEY_PREFIX = "idem:app:appointment:submit:";
+
     @Autowired
     private ViewAppointmentService viewAppointmentService;
  
@@ -41,15 +48,18 @@ public class ViewAppointmentController {
 
     @Autowired
     private RedisRateLimiter redisRateLimiter;
+
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
  
     @Operation(summary = "保存或更新看房预约")
     @PostMapping("/saveOrUpdate")
     public Result saveOrUpdate(@RequestBody @Valid AppointmentSubmitVo submitVo, HttpServletRequest request) {
         Long currentUserId = LoginUserHolder.get().getId();
-
+ 
         // P0：接口稳定性（防刷）- 预约提交按 userId + IP 双维度限流
         String ip = IpUtil.getClientIp(request);
-
+ 
         boolean userAllowed = redisRateLimiter.tryAcquire(
                 RedisRateLimiter.key("app:appointment", "userId", currentUserId),
                 5,
@@ -58,7 +68,7 @@ public class ViewAppointmentController {
         if (!userAllowed) {
             throw new LeaseException(ResultCodeEnum.APP_REQUEST_TOO_FREQUENT);
         }
-
+ 
         boolean ipAllowed = redisRateLimiter.tryAcquire(
                 RedisRateLimiter.key("app:appointment", "ip", ip),
                 60,
@@ -66,6 +76,18 @@ public class ViewAppointmentController {
         );
         if (!ipAllowed) {
             throw new LeaseException(ResultCodeEnum.APP_REQUEST_TOO_FREQUENT);
+        }
+
+        // P0-稳定：幂等（10s 窗口）- 同一用户同一参数重复提交直接拦截
+        // 说明：不依赖 DB 唯一索引，优先挡住“重复请求”带来的重复写。
+        String action = (submitVo.getId() == null) ? "new" : ("upd:" + submitVo.getId());
+        long appointmentTime = submitVo.getAppointmentTime().getTime();
+        String idemKey = APPOINTMENT_IDEMPOTENCY_KEY_PREFIX
+                + currentUserId + ":" + action + ":" + submitVo.getApartmentId() + ":" + appointmentTime;
+
+        Boolean first = stringRedisTemplate.opsForValue().setIfAbsent(idemKey, "1", 10, TimeUnit.SECONDS);
+        if (Boolean.FALSE.equals(first)) {
+            throw new LeaseException(ResultCodeEnum.REPEAT_SUBMIT);
         }
  
         ViewAppointment viewAppointment = new ViewAppointment();
