@@ -1,7 +1,9 @@
 package com.atguigu.lease.web.app.custom.interceptor;
 
+import com.atguigu.lease.common.exception.LeaseException;
 import com.atguigu.lease.common.login.LoginUser;
 import com.atguigu.lease.common.login.LoginUserHolder;
+import com.atguigu.lease.common.result.ResultCodeEnum;
 import com.atguigu.lease.common.utils.JwtUtil;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,6 +16,10 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         String token = request.getHeader("access-token");
+        if (token == null || token.isBlank()) {
+            // app 端未登录语义：缺少 token 直接视为未登录
+            throw new LeaseException(ResultCodeEnum.APP_LOGIN_AUTH);
+        }
 
         Claims claims = JwtUtil.parseToken(token);
 

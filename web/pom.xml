@@ -28,6 +28,12 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
+        <!--JSR-303 参数校验（@Valid/@NotNull/@NotBlank 等）-->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
         <!--包含spring test相关依赖-->
         <dependency>
             <groupId>org.springframework.boot</groupId>

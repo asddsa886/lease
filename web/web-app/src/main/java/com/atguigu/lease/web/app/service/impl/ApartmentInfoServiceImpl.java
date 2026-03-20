@@ -1,5 +1,7 @@
 package com.atguigu.lease.web.app.service.impl;
 
+import com.atguigu.lease.common.exception.LeaseException;
+import com.atguigu.lease.common.result.ResultCodeEnum;
 import com.atguigu.lease.model.entity.ApartmentInfo;
 import com.atguigu.lease.model.entity.FacilityInfo;
 import com.atguigu.lease.model.entity.LabelInfo;
@@ -44,7 +46,15 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
 
     @Override
     public ApartmentDetailVo getDetailById(Long id) {
+        if (id == null) {
+            throw new LeaseException(ResultCodeEnum.PARAM_ERROR);
+        }
+
         ApartmentInfo apartmentInfo = apartmentInfoMapper.selectById(id);
+        if (apartmentInfo == null) {
+            throw new LeaseException(ResultCodeEnum.DATA_ERROR);
+        }
+
         List<GraphVo> graphVos = graphInfoMapper.selectListByItemTypeAndId(ItemType.APARTMENT, id);
         List<LabelInfo> labelInfos = labelInfoMapper.selectListByApartmentId(id);
         List<FacilityInfo> facilityInfos = facilityInfoMapper.selectListByApartmentId(id);
@@ -57,13 +67,20 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
         apartmentDetailVo.setGraphVoList(graphVos);
         apartmentDetailVo.setMinRent(min);
 
-
         return apartmentDetailVo;
     }
 
     @Override
     public ApartmentItemVo getItemById(Long id) {
+        if (id == null) {
+            throw new LeaseException(ResultCodeEnum.PARAM_ERROR);
+        }
+
         ApartmentInfo apartmentInfo = apartmentInfoMapper.selectById(id);
+        if (apartmentInfo == null) {
+            throw new LeaseException(ResultCodeEnum.DATA_ERROR);
+        }
+
         List<GraphVo> graphVos = graphInfoMapper.selectListByItemTypeAndId(ItemType.APARTMENT, id);
         List<LabelInfo> labelInfos = labelInfoMapper.selectListByApartmentId(id);
         List<FacilityInfo> facilityInfos = facilityInfoMapper.selectListByApartmentId(id);
@@ -74,7 +91,6 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
         apartmentItemVo.setLabelInfoList(labelInfos);
         apartmentItemVo.setGraphVoList(graphVos);
         apartmentItemVo.setMinRent(min);
-
 
         return apartmentItemVo;
     }

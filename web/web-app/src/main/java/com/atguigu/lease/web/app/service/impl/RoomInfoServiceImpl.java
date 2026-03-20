@@ -1,6 +1,8 @@
 package com.atguigu.lease.web.app.service.impl;
 
+import com.atguigu.lease.common.exception.LeaseException;
 import com.atguigu.lease.common.login.LoginUserHolder;
+import com.atguigu.lease.common.result.ResultCodeEnum;
 import com.atguigu.lease.model.entity.*;
 import com.atguigu.lease.model.enums.ItemType;
 import com.atguigu.lease.web.app.mapper.*;
@@ -68,9 +70,20 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
 
     @Override
     public RoomDetailVo getDetailById(Long id) {
+        if (id == null) {
+            throw new LeaseException(ResultCodeEnum.PARAM_ERROR);
+        }
+
         RoomInfo roomInfo = roomInfoMapper.selectById(id);
+        if (roomInfo == null) {
+            throw new LeaseException(ResultCodeEnum.DATA_ERROR);
+        }
+
         //2.查询所属公寓信息
         ApartmentInfo apartmentInfo = apartmentInfoMapper.selectById(roomInfo.getApartmentId());
+        if (apartmentInfo == null) {
+            throw new LeaseException(ResultCodeEnum.DATA_ERROR);
+        }
 
         List<GraphVo> graphVoA = graphInfoMapper.selectListByItemTypeAndId(ItemType.APARTMENT, roomInfo.getApartmentId());
         List<LabelInfo> labelInfoA = labelInfoMapper.selectListByApartmentId(roomInfo.getApartmentId());
@@ -111,8 +124,10 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
         roomDetailVo.setPaymentTypeList(paymentTypeList);
         roomDetailVo.setLeaseTermList(leaseTermList);
 
-        //  保存浏览历史 异步处理
-        browsingHistoryService.saveHistory(LoginUserHolder.get().getId(),id);
+        //  保存浏览历史 异步处理（防御：未登录场景不写入）
+        if (LoginUserHolder.get() != null) {
+            browsingHistoryService.saveHistory(LoginUserHolder.get().getId(), id);
+        }
 
         return roomDetailVo;
     }
