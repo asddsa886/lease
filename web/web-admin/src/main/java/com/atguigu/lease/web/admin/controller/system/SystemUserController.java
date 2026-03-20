@@ -13,8 +13,8 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.apache.commons.codec.digest.DigestUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 
@@ -24,6 +24,9 @@ import org.springframework.web.bind.annotation.*;
 public class SystemUserController {
     @Autowired
     private SystemUserService systemUserService;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     @Operation(summary = "根据条件分页查询后台用户列表")
     @GetMapping("page")
@@ -44,9 +47,29 @@ public class SystemUserController {
     @Operation(summary = "保存或更新后台用户信息")
     @PostMapping("saveOrUpdate")
     public Result saveOrUpdate(@RequestBody SystemUser systemUser) {
-        if (systemUser.getId() != null) {
-            systemUser.setPassword(DigestUtils.md5Hex(systemUser.getPassword()));
+        if (systemUser == null) {
+            return Result.fail();
         }
+
+        boolean isCreate = systemUser.getId() == null;
+
+        // P0-安全：密码处理策略
+        // - 新增：必须设置密码且进行 BCrypt 哈希
+        // - 更新：只有在传了非空密码时才更新密码；否则不覆盖（避免把密码置空/重复哈希）
+        String rawPassword = systemUser.getPassword();
+        if (isCreate) {
+            if (rawPassword == null || rawPassword.isBlank()) {
+                return Result.fail();
+            }
+            systemUser.setPassword(passwordEncoder.encode(rawPassword));
+        } else {
+            if (rawPassword != null && !rawPassword.isBlank()) {
+                systemUser.setPassword(passwordEncoder.encode(rawPassword));
+            } else {
+                systemUser.setPassword(null); // 交给 MyBatis-Plus 动态更新策略（不更新该字段）
+            }
+        }
+
         systemUserService.saveOrUpdate(systemUser);
         return Result.ok();
     }

@@ -14,6 +14,7 @@ import com.wf.captcha.SpecCaptcha;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
@@ -32,6 +33,9 @@ public class LoginServiceImpl implements LoginService {
 
     @Autowired
     private SystemUserMapper systemUserMapper;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     @Override
     public CaptchaVo getCaptcha() {
@@ -85,13 +89,42 @@ public class LoginServiceImpl implements LoginService {
             throw new LeaseException(ResultCodeEnum.ADMIN_ACCOUNT_DISABLED_ERROR);
         }
 
-        // P0-安全：修复密码校验逻辑（原逻辑写反，会导致正确密码也登录失败/或错误密码放行）
-        String encrypted = DigestUtils.md5Hex(loginVo.getPassword());
-        if (!systemUser.getPassword().equals(encrypted)) {
+        // P0-安全：密码哈希升级（BCrypt 优先）+ 兼容旧 MD5 自动升级
+        String rawPassword = loginVo.getPassword();
+        if (rawPassword == null || rawPassword.isBlank()) {
+            throw new LeaseException(ResultCodeEnum.ADMIN_ACCOUNT_ERROR);
+        }
+
+        String storedHash = systemUser.getPassword();
+        boolean matched;
+        if (isBcryptHash(storedHash)) {
+            matched = passwordEncoder.matches(rawPassword, storedHash);
+        } else {
+            // 兼容旧 MD5
+            String md5 = DigestUtils.md5Hex(rawPassword);
+            matched = storedHash != null && storedHash.equals(md5);
+            if (matched) {
+                // 登录成功即升级为 BCrypt（平滑迁移）
+                SystemUser update = new SystemUser();
+                update.setId(systemUser.getId());
+                update.setPassword(passwordEncoder.encode(rawPassword));
+                systemUserMapper.updateById(update);
+            }
+        }
+
+        if (!matched) {
             throw new LeaseException(ResultCodeEnum.ADMIN_ACCOUNT_ERROR);
         }
 
         return JwtUtil.creatToken(systemUser.getId(), systemUser.getUsername());
+    }
+
+    private static boolean isBcryptHash(String hash) {
+        if (hash == null) {
+            return false;
+        }
+        // $2a$ / $2b$ / $2y$ 常见 bcrypt 前缀
+        return (hash.startsWith("$2a$") || hash.startsWith("$2b$") || hash.startsWith("$2y$"));
     }
 
     @Override

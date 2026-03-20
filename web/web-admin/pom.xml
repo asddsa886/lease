@@ -35,6 +35,12 @@
             <scope>compile</scope>
         </dependency>
 
+        <!-- P0-安全：密码哈希升级（BCrypt） -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-crypto</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
