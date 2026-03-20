@@ -1,6 +1,7 @@
 package com.atguigu.lease.web.app.custom.interceptor;
 
 import com.atguigu.lease.common.exception.LeaseException;
+import com.atguigu.lease.common.filter.TraceContextFilter;
 import com.atguigu.lease.common.login.LoginUser;
 import com.atguigu.lease.common.login.LoginUserHolder;
 import com.atguigu.lease.common.result.ResultCodeEnum;
@@ -27,6 +28,11 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
         String username = claims.get("username", String.class);
 
         LoginUserHolder.set(new LoginUser(userId, username));
+
+        // P0 可观测性：将用户信息写入 request attribute，供 access log（Filter）在 finally 中读取
+        request.setAttribute(TraceContextFilter.ATTR_LOGIN_USER_ID, userId);
+        request.setAttribute(TraceContextFilter.ATTR_LOGIN_USERNAME, username);
+
         return true;
     }
 
