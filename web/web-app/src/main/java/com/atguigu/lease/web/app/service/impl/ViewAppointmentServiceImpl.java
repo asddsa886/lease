@@ -7,11 +7,16 @@ import com.atguigu.lease.model.enums.AppointmentStatus;
 import com.atguigu.lease.web.app.mapper.ViewAppointmentMapper;
 import com.atguigu.lease.web.app.service.ViewAppointmentService;
 import com.atguigu.lease.web.app.vo.appointment.AppointmentItemVo;
+import com.atguigu.lease.web.app.vo.graph.GraphVo;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * @author liubo
@@ -27,7 +32,35 @@ public class ViewAppointmentServiceImpl extends ServiceImpl<ViewAppointmentMappe
 
     @Override
     public List<AppointmentItemVo> getDetailByUserId(Long id) {
-        return viewAppointmentMapper.getDetailByUserId(id);
+        List<AppointmentItemVo> items = viewAppointmentMapper.getDetailByUserId(id);
+        if (items == null || items.isEmpty()) {
+            return items;
+        }
+
+        // 批量查询图片并按 apartmentId 分组，避免 N+1
+        List<Long> apartmentIds = items.stream()
+                .map(AppointmentItemVo::getApartmentId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (apartmentIds.isEmpty()) {
+            return items;
+        }
+
+        List<GraphVo> graphs = viewAppointmentMapper.listApartmentGraphsByApartmentIds(apartmentIds);
+        Map<Long, List<GraphVo>> graphMap = (graphs == null ? Collections.<GraphVo>emptyList() : graphs)
+                .stream()
+                .filter(g -> g.getApartmentId() != null)
+                .collect(Collectors.groupingBy(GraphVo::getApartmentId));
+
+        for (AppointmentItemVo item : items) {
+            if (item.getApartmentId() == null) {
+                item.setGraphVoList(Collections.emptyList());
+                continue;
+            }
+            item.setGraphVoList(graphMap.getOrDefault(item.getApartmentId(), Collections.emptyList()));
+        }
+        return items;
     }
 
     @Override

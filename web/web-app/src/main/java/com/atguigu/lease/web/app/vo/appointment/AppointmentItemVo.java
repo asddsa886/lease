@@ -19,6 +19,13 @@ public class AppointmentItemVo {
     @Schema(description = "预约公寓名称")
     private String apartmentName;
 
+    /**
+     * 仅用于 service 层批量组装图片列表。
+     * <p>
+     * 来源：view_appointment.apartment_id
+     */
+    private Long apartmentId;
+
     @Schema(description = "公寓图片列表")
     private List<GraphVo> graphVoList;
 

@@ -12,6 +12,7 @@ import com.atguigu.lease.web.admin.vo.apartment.ApartmentSubmitVo;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.atguigu.lease.common.utils.PageParamUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,8 +38,10 @@ public class ApartmentController {
 
     @Operation(summary = "根据条件分页查询公寓列表")
     @GetMapping("pageItem")
-    public Result<IPage<ApartmentItemVo>> pageItem(@RequestParam long current, @RequestParam long size, ApartmentQueryVo queryVo) {
-        Page<ApartmentItemVo> page = new Page<>(current, size);
+    public Result<IPage<ApartmentItemVo>> pageItem(@RequestParam(required = false) Long current,
+                                                   @RequestParam(required = false) Long size,
+                                                   ApartmentQueryVo queryVo) {
+        Page<ApartmentItemVo> page = new Page<>(PageParamUtils.current(current), PageParamUtils.size(size));
         IPage<ApartmentItemVo> result = apartmentInfoService.pageItem(page,queryVo);
         return Result.ok(result);
     }

@@ -1,5 +1,7 @@
 package com.atguigu.lease.web.admin.service.impl;
 
+import com.atguigu.lease.common.constant.RedisConstant.RedisConstant;
+import com.atguigu.lease.common.utils.TransactionUtils;
 import com.atguigu.lease.model.entity.*;
 import com.atguigu.lease.model.enums.ItemType;
 import com.atguigu.lease.web.admin.mapper.*;
@@ -16,6 +18,7 @@ import com.baomidou.mybatisplus.core.toolkit.CollectionUtils;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -73,6 +76,9 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
     @Autowired
     private RoomPaymentTypeService roomPaymentTypeService;
 
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
+
 
     @Override
     public IPage<RoomItemVo> pageRoomItemByQuery(IPage<RoomItemVo> page, RoomQueryVo queryVo) {
@@ -84,6 +90,11 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
     public void saveOrUpdateRoom(RoomSubmitVo roomSubmitVo) {
         boolean isUpdate = roomSubmitVo.getId() != null;
         super.saveOrUpdate(roomSubmitVo);
+
+        // P1-缓存一致性：事务提交后删缓存（房间详情 + 对应公寓详情）
+        Long roomId = roomSubmitVo.getId();
+        Long apartmentId = roomSubmitVo.getApartmentId();
+        TransactionUtils.runAfterCommit(() -> evictAppRoomRelatedCache(roomId, apartmentId));
 
         //若为更新操作，则先删除与Room相关的各项信息列表
 
@@ -235,6 +246,10 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void removeRoomById(Long id) {
+        // 先取出 apartmentId，后续用于删公寓详情缓存
+        RoomInfo roomInfo = this.getById(id);
+        Long apartmentId = roomInfo == null ? null : roomInfo.getApartmentId();
+
         super.removeById(id);
 
         LambdaQueryWrapper<GraphInfo> graphQueryWrapper = new LambdaQueryWrapper<>();
@@ -267,6 +282,17 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
         termQueryWrapper.eq(RoomLeaseTerm::getRoomId, id);
         roomLeaseTermService.remove(termQueryWrapper);
 
+        TransactionUtils.runAfterCommit(() -> evictAppRoomRelatedCache(id, apartmentId));
+
+    }
+
+    private void evictAppRoomRelatedCache(Long roomId, Long apartmentId) {
+        if (roomId != null) {
+            stringRedisTemplate.delete(RedisConstant.APP_ROOM_DETAIL_KEY_PREFIX + roomId);
+        }
+        if (apartmentId != null) {
+            stringRedisTemplate.delete(RedisConstant.APP_APARTMENT_DETAIL_KEY_PREFIX + apartmentId);
+        }
     }
 }
 

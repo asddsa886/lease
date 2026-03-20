@@ -3,14 +3,8 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.atguigu.lease.web.app.mapper.ViewAppointmentMapper">
-    <resultMap id="Appointment" type="com.atguigu.lease.web.app.vo.appointment.AppointmentItemVo" autoMapping="true">
-        <id property="id" column="id"></id>
-        <collection property="graphVoList" ofType="com.atguigu.lease.web.app.vo.graph.GraphVo" select="t1" column="apartment_id">
 
-        </collection>
-    </resultMap>
-
-    <select id="getDetailByUserId" resultMap="Appointment">
+    <select id="getDetailByUserId" resultType="com.atguigu.lease.web.app.vo.appointment.AppointmentItemVo" autoMapping="true">
         select va.id,
                va.apartment_id,
                va.appointment_time,
@@ -22,12 +16,18 @@
           and user_id = #{id}
 
     </select>
-    <select id="t1" resultType="com.atguigu.lease.web.app.vo.graph.GraphVo">
-        select url,
-               name
+
+    <select id="listApartmentGraphsByApartmentIds" resultType="com.atguigu.lease.web.app.vo.graph.GraphVo" autoMapping="true">
+        select
+        item_id as apartmentId,
+        url,
+        name
         from graph_info
         where is_deleted = 0
-          and item_type = 1
-          and item_id = #{apartment_id}
+        and item_type = 1
+        and item_id in
+        <foreach collection="apartmentIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
     </select>
 </mapper>

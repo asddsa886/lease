@@ -2,6 +2,8 @@ package com.atguigu.lease.web.admin.service.impl;
 
 import com.atguigu.lease.common.exception.LeaseException;
 import com.atguigu.lease.common.result.ResultCodeEnum;
+import com.atguigu.lease.common.constant.RedisConstant.RedisConstant;
+import com.atguigu.lease.common.utils.TransactionUtils;
 import com.atguigu.lease.model.entity.*;
 import com.atguigu.lease.model.enums.ItemType;
 import com.atguigu.lease.web.admin.mapper.*;
@@ -16,9 +18,9 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import org.checkerframework.checker.units.qual.A;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -64,6 +66,9 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
     @Autowired
     private ApartmentFeeValueService apartmentFeeValueService;
 
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
+
 
 
     @Override
@@ -71,6 +76,11 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
     public void saveOrUpdateApartment(ApartmentSubmitVo apartmentSubmitVo) {
         boolean isUpdate = apartmentSubmitVo.getId() != null;
         super.saveOrUpdate(apartmentSubmitVo);
+
+        // P1-缓存一致性：事务提交后删除 APP 端详情聚合缓存（避免回滚时误删）
+        Long apartmentId = apartmentSubmitVo.getId();
+        TransactionUtils.runAfterCommit(() -> evictAppApartmentRelatedCache(apartmentId));
+
         // 更新
         if (isUpdate) {
             // 删除图片信息
@@ -213,6 +223,38 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
         apartmentFeeValueService.remove(apartmentFeeValueLambdaQueryWrapper);
 
         super.removeById(id);
+
+        // P1-缓存一致性：删除后提交再删缓存
+        TransactionUtils.runAfterCommit(() -> evictAppApartmentRelatedCache(id));
+    }
+
+    /**
+     * 删除 APP 端与公寓相关的缓存：
+     * 1) 公寓详情
+     * 2) 公寓下房间详情（minRent/标签等变更可能影响房间详情中的公寓信息）
+     */
+    private void evictAppApartmentRelatedCache(Long apartmentId) {
+        if (apartmentId == null) {
+            return;
+        }
+
+        // 1) apartment detail
+        stringRedisTemplate.delete(RedisConstant.APP_APARTMENT_DETAIL_KEY_PREFIX + apartmentId);
+
+        // 2) room detail under this apartment
+        LambdaQueryWrapper<RoomInfo> roomQuery = new LambdaQueryWrapper<>();
+        roomQuery.eq(RoomInfo::getApartmentId, apartmentId);
+        roomQuery.eq(RoomInfo::getIsDeleted, 0);
+        roomQuery.select(RoomInfo::getId);
+        List<RoomInfo> rooms = roomInfoMapper.selectList(roomQuery);
+        if (rooms == null || rooms.isEmpty()) {
+            return;
+        }
+        for (RoomInfo room : rooms) {
+            if (room != null && room.getId() != null) {
+                stringRedisTemplate.delete(RedisConstant.APP_ROOM_DETAIL_KEY_PREFIX + room.getId());
+            }
+        }
     }
 }
 

@@ -15,12 +15,18 @@ import com.atguigu.lease.web.app.vo.user.UserInfoVo;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+
+import org.springframework.validation.annotation.Validated;
  
 @Tag(name = "登录管理")
 @RestController
 @RequestMapping("/app/")
+@Validated
 public class LoginController {
  
     @Autowired
@@ -37,7 +43,11 @@ public class LoginController {
  
     @GetMapping("login/getCode")
     @Operation(summary = "获取短信验证码")
-    public Result getCode(@RequestParam String phone, HttpServletRequest request) {
+    public Result getCode(@RequestParam
+                              @NotBlank(message = "phone不能为空")
+                              @Pattern(regexp = "^1\\d{10}$", message = "phone格式不合法")
+                              String phone,
+                          HttpServletRequest request) {
         // P0：接口稳定性（防刷）- 短信验证码按 IP + phone 双维度限流
         String ip = IpUtil.getClientIp(request);
 
@@ -67,7 +77,7 @@ public class LoginController {
  
     @PostMapping("login")
     @Operation(summary = "登录")
-    public Result<String> login(@RequestBody LoginVo loginVo, HttpServletRequest request) {
+    public Result<String> login(@RequestBody @Valid LoginVo loginVo, HttpServletRequest request) {
         // P0：接口稳定性（防刷）- 登录按 IP + phone 双维度限流（防爆破/撞库）
         String ip = IpUtil.getClientIp(request);
 
@@ -82,16 +92,13 @@ public class LoginController {
             throw new LeaseException(ResultCodeEnum.APP_REQUEST_TOO_FREQUENT);
         }
 
-        // phone 为空时，后续业务会抛 APP_LOGIN_PHONE_EMPTY；这里不做强依赖，避免 NPE
-        if (loginVo != null && loginVo.getPhone() != null && !loginVo.getPhone().isBlank()) {
-            boolean phoneAllowed = redisRateLimiter.tryAcquireSlidingWindow(
-                    RedisRateLimiter.key("app:login", "phone", loginVo.getPhone()),
-                    rule.getPhone().getLimit(),
-                    rule.getPhone().getWindow()
-            );
-            if (!phoneAllowed) {
-                throw new LeaseException(ResultCodeEnum.APP_REQUEST_TOO_FREQUENT);
-            }
+        boolean phoneAllowed = redisRateLimiter.tryAcquireSlidingWindow(
+                RedisRateLimiter.key("app:login", "phone", loginVo.getPhone()),
+                rule.getPhone().getLimit(),
+                rule.getPhone().getWindow()
+        );
+        if (!phoneAllowed) {
+            throw new LeaseException(ResultCodeEnum.APP_REQUEST_TOO_FREQUENT);
         }
 
         String token = loginService.login(loginVo);

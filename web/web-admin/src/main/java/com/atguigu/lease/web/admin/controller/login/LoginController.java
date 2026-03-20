@@ -15,12 +15,16 @@ import com.atguigu.lease.web.admin.vo.system.user.SystemUserInfoVo;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+
+import org.springframework.validation.annotation.Validated;
  
 @Tag(name = "后台管理系统登录管理")
 @RestController
 @RequestMapping("/admin")
+@Validated
 public class LoginController {
  
     @Autowired
@@ -50,7 +54,7 @@ public class LoginController {
  
     @Operation(summary = "登录")
     @PostMapping("login")
-    public Result<String> login(@RequestBody LoginVo loginVo, HttpServletRequest request) {
+    public Result<String> login(@RequestBody @Valid LoginVo loginVo, HttpServletRequest request) {
         // P0：接口稳定性（防刷）- 按 IP 限流，降低爆破风险
         String ip = IpUtil.getClientIp(request);
         String rlKey = RedisRateLimiter.key("admin:login", "ip", ip);

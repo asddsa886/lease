@@ -13,6 +13,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.atguigu.lease.common.utils.PageParamUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,8 +37,10 @@ public class RoomController {
 
     @Operation(summary = "根据条件分页查询房间列表")
     @GetMapping("pageItem")
-    public Result<IPage<RoomItemVo>> pageItem(@RequestParam long current, @RequestParam long size, RoomQueryVo queryVo) {
-        IPage<RoomItemVo> page = new Page<>(current, size);
+    public Result<IPage<RoomItemVo>> pageItem(@RequestParam(required = false) Long current,
+                                              @RequestParam(required = false) Long size,
+                                              RoomQueryVo queryVo) {
+        IPage<RoomItemVo> page = new Page<>(PageParamUtils.current(current), PageParamUtils.size(size));
         IPage<RoomItemVo> result = service.pageRoomItemByQuery(page,queryVo);
         return Result.ok(result);
     }
@@ -58,7 +61,7 @@ public class RoomController {
 
     @Operation(summary = "根据id修改房间发布状态")
     @PostMapping("updateReleaseStatusById")
-    public Result updateReleaseStatusById(Long id, ReleaseStatus status) {
+    public Result updateReleaseStatusById(@RequestParam Long id, @RequestParam ReleaseStatus status) {
         LambdaUpdateWrapper<RoomInfo> updateWrapper = new LambdaUpdateWrapper<>();
         updateWrapper.eq(RoomInfo::getId, id);
         updateWrapper.set(RoomInfo::getIsRelease, status);
@@ -68,7 +71,7 @@ public class RoomController {
 
     @GetMapping("listBasicByApartmentId")
     @Operation(summary = "根据公寓id查询房间列表")
-    public Result<List<RoomInfo>> listBasicByApartmentId(Long id) {
+    public Result<List<RoomInfo>> listBasicByApartmentId(@RequestParam Long id) {
         LambdaQueryWrapper<RoomInfo> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(RoomInfo::getApartmentId, id);
         queryWrapper.eq(RoomInfo::getIsRelease, ReleaseStatus.RELEASED);

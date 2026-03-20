@@ -7,6 +7,9 @@ import com.atguigu.lease.web.admin.service.PaymentTypeService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.atguigu.lease.common.utils.PageParamUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,6 +30,16 @@ public class PaymentTypeController {
         queryWrapper.eq(PaymentType::getIsDeleted, 0);
         List<PaymentType> list = paymentTypeService.list(queryWrapper);
         return Result.ok(list);
+    }
+
+    @Operation(summary = "分页查询支付方式列表")
+    @GetMapping("page")
+    public Result<IPage<PaymentType>> page(@RequestParam(required = false) Long current,
+                                          @RequestParam(required = false) Long size) {
+        LambdaQueryWrapper<PaymentType> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(PaymentType::getIsDeleted, 0);
+        Page<PaymentType> page = new Page<>(PageParamUtils.current(current), PageParamUtils.size(size));
+        return Result.ok(paymentTypeService.page(page, queryWrapper));
     }
 
     @Operation(summary = "保存或更新支付方式")
