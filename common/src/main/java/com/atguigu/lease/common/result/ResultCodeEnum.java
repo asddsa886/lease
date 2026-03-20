@@ -21,7 +21,7 @@ public enum ResultCodeEnum {
     ADMIN_CAPTCHA_CODE_ERROR(302, "验证码错误"),
     ADMIN_CAPTCHA_CODE_EXPIRED(303, "验证码已过期"),
     ADMIN_CAPTCHA_CODE_NOT_FOUND(304, "未输入验证码"),
-
+    ADMIN_REQUEST_TOO_FREQUENT(311, "请求过于频繁，请稍后再试"),
 
     ADMIN_LOGIN_AUTH(305, "未登陆"),
     ADMIN_ACCOUNT_NOT_EXIST_ERROR(306, "账号不存在"),
@@ -38,7 +38,7 @@ public enum ResultCodeEnum {
     APP_LOGIN_CODE_EXPIRED(505, "验证码已过期"),
     APP_LOGIN_CODE_ERROR(506, "验证码错误"),
     APP_ACCOUNT_DISABLED_ERROR(507, "该用户已被禁用"),
-
+    APP_REQUEST_TOO_FREQUENT(508, "请求过于频繁，请稍后再试"),
 
     TOKEN_EXPIRED(601, "token过期"),
     TOKEN_INVALID(602, "token非法");

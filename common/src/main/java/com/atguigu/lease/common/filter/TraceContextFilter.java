@@ -39,6 +39,22 @@ public class TraceContextFilter extends OncePerRequestFilter {
     public static final String ATTR_LOGIN_USER_ID = "loginUserId";
     public static final String ATTR_LOGIN_USERNAME = "loginUsername";
 
+    /**
+     * P0：过滤掉非业务请求（Swagger/OpenAPI、静态资源），减少 access log 噪音
+     */
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        if (uri == null || uri.isBlank()) {
+            return false;
+        }
+        return uri.startsWith("/v3/api-docs")
+                || uri.startsWith("/swagger-ui")
+                || uri.startsWith("/swagger-resources")
+                || uri.startsWith("/webjars")
+                || "/favicon.ico".equals(uri);
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,

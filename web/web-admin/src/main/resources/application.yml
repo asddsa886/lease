@@ -30,15 +30,22 @@ spring:
       database: 0
 
 
-#用于打印框架生成的sql语句，便于调试
+# 用于打印框架生成的 sql 语句，便于调试（建议仅在开发环境开启）
+# 关掉控制台刷屏：注释掉 StdOutImpl（会输出 Preparing/Parameters/SQLStructure 等）
 mybatis-plus:
-  configuration:
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  # configuration:
+  #   log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   global-config:
     db-config:
       logic-delete-field: is_deleted # 全局逻辑删除的实体字段名(配置后可以忽略不配置步骤二)
       logic-delete-value: 1 # 逻辑已删除值(默认为 1)
       logic-not-delete-value: 0 # 逻辑未删除值(默认为 0)
+
+# 进一步降噪（可选）：控制框架日志级别
+logging:
+  level:
+    org.mybatis: warn
+    com.baomidou.mybatisplus: warn
 
 minio:
   endpoint: https://objectstorageapi.ap-southeast-1.clawcloudrun.com
