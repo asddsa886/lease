@@ -42,6 +42,34 @@ public class RedisRateLimiter {
             Long.class
     );
 
+    /**
+     * 滑动窗口（ZSET）限流脚本：
+     * - 清理窗口外数据
+     * - 统计窗口内数量
+     * - 未超限则写入本次请求并设置 key 过期
+     * 返回：0=允许；1=限流
+     */
+    private static final DefaultRedisScript<Long> SLIDING_WINDOW_SCRIPT = new DefaultRedisScript<>(
+            // KEYS[1] = key
+            // ARGV[1] = nowMs
+            // ARGV[2] = windowMs
+            // ARGV[3] = limit
+            // ARGV[4] = member
+            "local key = KEYS[1]; " +
+                    "local now = tonumber(ARGV[1]); " +
+                    "local window = tonumber(ARGV[2]); " +
+                    "local limit = tonumber(ARGV[3]); " +
+                    "local member = ARGV[4]; " +
+                    "redis.call('ZREMRANGEBYSCORE', key, 0, now - window); " +
+                    "local c = redis.call('ZCARD', key); " +
+                    "if c >= limit then return 1 end; " +
+                    "redis.call('ZADD', key, now, member); " +
+                    // key 过期设置为 window 秒（向上取整），避免无限增长
+                    "redis.call('PEXPIRE', key, window); " +
+                    "return 0;",
+            Long.class
+    );
+
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
 
@@ -56,6 +84,40 @@ public class RedisRateLimiter {
     public boolean tryAcquire(String key, int limit, Duration window) {
         long count = acquireAndGetCount(key, window);
         return count <= limit;
+    }
+
+    /**
+     * 尝试获取一次额度（滑动窗口）。
+     *
+     * @return true=允许；false=被限流
+     */
+    public boolean tryAcquireSlidingWindow(String key, int limit, Duration window) {
+        if (limitInvalid(key, window)) {
+            return true;
+        }
+        if (limit <= 0) {
+            return true;
+        }
+
+        long nowMs = System.currentTimeMillis();
+        long windowMs = Math.max(1, window.toMillis());
+        String member = nowMs + "-" + Thread.currentThread().getId();
+
+        try {
+            Long blocked = stringRedisTemplate.execute(
+                    SLIDING_WINDOW_SCRIPT,
+                    Collections.singletonList(key),
+                    String.valueOf(nowMs),
+                    String.valueOf(windowMs),
+                    String.valueOf(limit),
+                    member
+            );
+            return blocked == null || blocked == 0;
+        } catch (Exception e) {
+            // Redis 异常默认放行，保证可用性；由日志/监控兜底
+            log.warn("RateLimit slidingWindow acquire failed, key={}", key, e);
+            return true;
+        }
     }
 
     /**

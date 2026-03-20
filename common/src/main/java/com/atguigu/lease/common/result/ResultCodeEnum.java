@@ -42,6 +42,8 @@ public enum ResultCodeEnum {
     APP_SMS_SERVICE_ERROR(509, "短信服务异常，请稍后再试"),
     APP_SMS_CLIENT_INIT_ERROR(510, "短信服务初始化失败"),
 
+    TOKEN_MISSING(600, "token缺失"),
+
     TOKEN_EXPIRED(601, "token过期"),
     TOKEN_INVALID(602, "token非法");
 

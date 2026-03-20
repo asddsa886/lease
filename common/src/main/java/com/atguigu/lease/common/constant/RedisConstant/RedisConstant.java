@@ -20,6 +20,12 @@ public class RedisConstant {
     public static final String APP_LEASE_TERM_LIST_BY_ROOM_KEY_PREFIX = "app:lease:term:list:room:";
 
     /**
+     * 详情页聚合数据缓存 key
+     */
+    public static final String APP_APARTMENT_DETAIL_KEY_PREFIX = "app:apartment:detail:";
+    public static final String APP_ROOM_DETAIL_KEY_PREFIX = "app:room:detail:";
+
+    /**
      * 热数据缓存 TTL（秒）
      * 说明：热数据可设置较长 TTL，实际写入时建议附带随机抖动（例如 0~300s）防止缓存雪崩。
      */

@@ -27,6 +27,38 @@ springdoc:
 
 aliyun:
   sms:
+    # P0-安全：敏感信息不要提交到仓库，使用环境变量/配置中心注入
     access-key-id: ${ALIYUN_SMS_ACCESS_KEY_ID:}
     access-key-secret: ${ALIYUN_SMS_ACCESS_KEY_SECRET:}
-    endpoint: dysmsapi.aliyuncs.com
+    endpoint: ${ALIYUN_SMS_ENDPOINT:}
+
+# JWT 配置（建议生产环境通过环境变量注入，并定期轮转）
+jwt:
+  secret: ${JWT_SECRET:}
+  ttl: ${JWT_TTL:7d}
+
+# 限流阈值配置（可按环境差异化）
+rate-limit:
+  app:
+    sms:
+      ip:
+        limit: ${RL_APP_SMS_IP_LIMIT:20}
+        window: ${RL_APP_SMS_IP_WINDOW:60s}
+      phone:
+        limit: ${RL_APP_SMS_PHONE_LIMIT:3}
+        window: ${RL_APP_SMS_PHONE_WINDOW:60s}
+    login:
+      ip:
+        limit: ${RL_APP_LOGIN_IP_LIMIT:30}
+        window: ${RL_APP_LOGIN_IP_WINDOW:60s}
+      phone:
+        limit: ${RL_APP_LOGIN_PHONE_LIMIT:10}
+        window: ${RL_APP_LOGIN_PHONE_WINDOW:60s}
+
+    appointment:
+      user-id:
+        limit: ${RL_APP_APPOINTMENT_USER_LIMIT:5}
+        window: ${RL_APP_APPOINTMENT_USER_WINDOW:60s}
+      ip:
+        limit: ${RL_APP_APPOINTMENT_IP_LIMIT:60}
+        window: ${RL_APP_APPOINTMENT_IP_WINDOW:60s}

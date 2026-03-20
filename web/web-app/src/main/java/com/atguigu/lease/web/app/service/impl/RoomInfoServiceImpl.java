@@ -1,14 +1,16 @@
 package com.atguigu.lease.web.app.service.impl;
 
+import com.atguigu.lease.common.cache.HotDataCacheHelper;
+import com.atguigu.lease.common.constant.RedisConstant.RedisConstant;
 import com.atguigu.lease.common.exception.LeaseException;
 import com.atguigu.lease.common.login.LoginUserHolder;
 import com.atguigu.lease.common.result.ResultCodeEnum;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.atguigu.lease.model.entity.*;
 import com.atguigu.lease.model.enums.ItemType;
 import com.atguigu.lease.web.app.mapper.*;
 import com.atguigu.lease.web.app.service.BrowsingHistoryService;
 import com.atguigu.lease.web.app.service.RoomInfoService;
-import com.atguigu.lease.web.app.vo.apartment.ApartmentDetailVo;
 import com.atguigu.lease.web.app.vo.apartment.ApartmentItemVo;
 import com.atguigu.lease.web.app.vo.attr.AttrValueVo;
 import com.atguigu.lease.web.app.vo.graph.GraphVo;
@@ -63,6 +65,9 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
     @Autowired
     private BrowsingHistoryService browsingHistoryService;
 
+    @Autowired
+    private HotDataCacheHelper hotDataCacheHelper;
+
     @Override
     public IPage<RoomItemVo> pageItem(Page<RoomItemVo> page, RoomQueryVo queryVo) {
         return roomInfoMapper.pageItem(page,queryVo);
@@ -74,6 +79,22 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
             throw new LeaseException(ResultCodeEnum.PARAM_ERROR);
         }
 
+        String cacheKey = RedisConstant.APP_ROOM_DETAIL_KEY_PREFIX + id;
+        RoomDetailVo roomDetailVo = hotDataCacheHelper.getOrLoadWithLock(
+                cacheKey,
+                new TypeReference<RoomDetailVo>() {
+                },
+                () -> loadRoomDetailById(id)
+        );
+
+        // 用户侧行为（浏览历史）不应被缓存：即使命中缓存也要记录
+        if (LoginUserHolder.get() != null) {
+            browsingHistoryService.saveHistory(LoginUserHolder.get().getId(), id);
+        }
+        return roomDetailVo;
+    }
+
+    private RoomDetailVo loadRoomDetailById(Long id) {
         RoomInfo roomInfo = roomInfoMapper.selectById(id);
         if (roomInfo == null) {
             throw new LeaseException(ResultCodeEnum.DATA_ERROR);
@@ -123,12 +144,6 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
         roomDetailVo.setLabelInfoList(labelInfoList);
         roomDetailVo.setPaymentTypeList(paymentTypeList);
         roomDetailVo.setLeaseTermList(leaseTermList);
-
-        //  保存浏览历史 异步处理（防御：未登录场景不写入）
-        if (LoginUserHolder.get() != null) {
-            browsingHistoryService.saveHistory(LoginUserHolder.get().getId(), id);
-        }
-
         return roomDetailVo;
     }
 

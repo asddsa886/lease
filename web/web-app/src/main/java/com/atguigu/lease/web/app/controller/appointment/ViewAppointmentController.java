@@ -3,6 +3,7 @@ package com.atguigu.lease.web.app.controller.appointment;
 import com.atguigu.lease.common.exception.LeaseException;
 import com.atguigu.lease.common.login.LoginUserHolder;
 import com.atguigu.lease.common.ratelimit.RedisRateLimiter;
+import com.atguigu.lease.common.ratelimit.RateLimitProperties;
 import com.atguigu.lease.common.result.Result;
 import com.atguigu.lease.common.result.ResultCodeEnum;
 import com.atguigu.lease.common.utils.IpUtil;
@@ -24,7 +25,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
- 
+
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -50,6 +51,9 @@ public class ViewAppointmentController {
     private RedisRateLimiter redisRateLimiter;
 
     @Autowired
+    private RateLimitProperties rateLimitProperties;
+
+    @Autowired
     private StringRedisTemplate stringRedisTemplate;
  
     @Operation(summary = "保存或更新看房预约")
@@ -60,19 +64,19 @@ public class ViewAppointmentController {
         // P0：接口稳定性（防刷）- 预约提交按 userId + IP 双维度限流
         String ip = IpUtil.getClientIp(request);
  
-        boolean userAllowed = redisRateLimiter.tryAcquire(
+        boolean userAllowed = redisRateLimiter.tryAcquireSlidingWindow(
                 RedisRateLimiter.key("app:appointment", "userId", currentUserId),
-                5,
-                Duration.ofSeconds(60)
+                rateLimitProperties.getApp().getAppointment().getUserId().getLimit(),
+                rateLimitProperties.getApp().getAppointment().getUserId().getWindow()
         );
         if (!userAllowed) {
             throw new LeaseException(ResultCodeEnum.APP_REQUEST_TOO_FREQUENT);
         }
  
-        boolean ipAllowed = redisRateLimiter.tryAcquire(
+        boolean ipAllowed = redisRateLimiter.tryAcquireSlidingWindow(
                 RedisRateLimiter.key("app:appointment", "ip", ip),
-                60,
-                Duration.ofSeconds(60)
+                rateLimitProperties.getApp().getAppointment().getIp().getLimit(),
+                rateLimitProperties.getApp().getAppointment().getIp().getWindow()
         );
         if (!ipAllowed) {
             throw new LeaseException(ResultCodeEnum.APP_REQUEST_TOO_FREQUENT);

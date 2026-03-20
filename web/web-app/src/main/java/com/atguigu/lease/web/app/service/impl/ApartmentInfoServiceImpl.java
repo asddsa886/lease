@@ -1,7 +1,10 @@
 package com.atguigu.lease.web.app.service.impl;
 
+import com.atguigu.lease.common.cache.HotDataCacheHelper;
+import com.atguigu.lease.common.constant.RedisConstant.RedisConstant;
 import com.atguigu.lease.common.exception.LeaseException;
 import com.atguigu.lease.common.result.ResultCodeEnum;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.atguigu.lease.model.entity.ApartmentInfo;
 import com.atguigu.lease.model.entity.FacilityInfo;
 import com.atguigu.lease.model.entity.LabelInfo;
@@ -43,6 +46,9 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
     @Autowired
     private RoomInfoMapper roomInfoMapper;
 
+    @Autowired
+    private HotDataCacheHelper hotDataCacheHelper;
+
 
     @Override
     public ApartmentDetailVo getDetailById(Long id) {
@@ -50,6 +56,16 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
             throw new LeaseException(ResultCodeEnum.PARAM_ERROR);
         }
 
+        String cacheKey = RedisConstant.APP_APARTMENT_DETAIL_KEY_PREFIX + id;
+        return hotDataCacheHelper.getOrLoadWithLock(
+                cacheKey,
+                new TypeReference<ApartmentDetailVo>() {
+                },
+                () -> loadApartmentDetailById(id)
+        );
+    }
+
+    private ApartmentDetailVo loadApartmentDetailById(Long id) {
         ApartmentInfo apartmentInfo = apartmentInfoMapper.selectById(id);
         if (apartmentInfo == null) {
             throw new LeaseException(ResultCodeEnum.DATA_ERROR);
@@ -66,7 +82,6 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
         apartmentDetailVo.setLabelInfoList(labelInfos);
         apartmentDetailVo.setGraphVoList(graphVos);
         apartmentDetailVo.setMinRent(min);
-
         return apartmentDetailVo;
     }
 

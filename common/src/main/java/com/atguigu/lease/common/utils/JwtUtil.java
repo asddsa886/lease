@@ -1,35 +1,72 @@
 package com.atguigu.lease.common.utils;
 
 import com.atguigu.lease.common.exception.LeaseException;
+import com.atguigu.lease.common.jwt.JwtProperties;
 import com.atguigu.lease.common.result.ResultCodeEnum;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
-import io.jsonwebtoken.security.SignatureException;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Date;
 
+/**
+ * JWT 工具：
+ * - secret/ttl 可配置（见 JwtProperties）
+ * - parseToken 不负责“是否登录”的语义判断（空 token 由各端拦截器处理）
+ */
+@Slf4j
+@Component
 public class JwtUtil {
-    // 随便写一串很长的、无意义的字符（必须大于等于32个字符）
-    private static String secretString = "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0";
 
-    private static SecretKey secretKey = Keys.hmacShaKeyFor(secretString.getBytes(StandardCharsets.UTF_8));
+    /**
+     * 兜底 secret：避免开发环境未配置导致启动失败；生产请务必配置 JWT_SECRET。
+     */
+    private static final String DEFAULT_SECRET = "change-me-to-a-long-random-string-at-least-32-chars";
 
-    public static String creatToken(Long userId,String username) {
-        String jwt = Jwts.builder().
-                setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 24 * 7)).
-                setSubject("LOGIN_USER").
-                claim("userId", userId).
-                claim("username", username).
-                signWith(secretKey, SignatureAlgorithm.HS256).compact();
-        return jwt;
+    private static volatile SecretKey secretKey;
+    private static volatile Duration ttl = Duration.ofDays(7);
+
+    @Autowired
+    public void init(JwtProperties props) {
+        String s = props.getSecret();
+        if (s == null || s.isBlank()) {
+            log.warn("jwt.secret is blank, using default weak secret (dev only)");
+            s = DEFAULT_SECRET;
+        }
+
+        // secret 长度不足会在 Keys.hmacShaKeyFor 抛异常，这里提前兜底。
+        if (s.length() < 32) {
+            log.warn("jwt.secret length < 32, padding to avoid runtime error (dev only)");
+            s = (s + DEFAULT_SECRET).substring(0, 32);
+        }
+        secretKey = Keys.hmacShaKeyFor(s.getBytes(StandardCharsets.UTF_8));
+
+        Duration t = props.getTtl();
+        if (t != null && !t.isZero() && !t.isNegative()) {
+            ttl = t;
+        }
+    }
+
+    public static String creatToken(Long userId, String username) {
+        long expMs = System.currentTimeMillis() + ttl.toMillis();
+        return Jwts.builder()
+                .setExpiration(new Date(expMs))
+                .setSubject("LOGIN_USER")
+                .claim("userId", userId)
+                .claim("username", username)
+                .signWith(secretKey, SignatureAlgorithm.HS256)
+                .compact();
     }
 
     public static Claims parseToken(String token) {
-
-        if (token == null) {
-            throw new LeaseException(ResultCodeEnum.ADMIN_LOGIN_AUTH);
+        // 只做解析；token 是否存在由调用方（拦截器）决定语义与错误码。
+        if (token == null || token.isBlank()) {
+            throw new LeaseException(ResultCodeEnum.TOKEN_MISSING);
         }
 
         try {
@@ -41,5 +78,4 @@ public class JwtUtil {
             throw new LeaseException(ResultCodeEnum.TOKEN_INVALID);
         }
     }
-
 }

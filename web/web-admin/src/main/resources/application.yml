@@ -48,10 +48,27 @@ logging:
     com.baomidou.mybatisplus: warn
 
 minio:
-  endpoint: https://objectstorageapi.ap-southeast-1.clawcloudrun.com
+  # P0-安全：敏感信息不要提交到仓库，使用环境变量/配置中心注入
+  # 为空时（默认）不会初始化 MinioClient（见 MinioConfiguration 的条件装配）
+  endpoint: ${MINIO_ENDPOINT:}
   access-key: ${MINIO_ACCESS_KEY:}
   secret-key: ${MINIO_SECRET_KEY:}
-  bucket-name: 6utmqg0g-lease
+  bucket-name: ${MINIO_BUCKET_NAME:}
+
+# JWT 配置（建议生产环境通过环境变量注入，并定期轮转）
+jwt:
+  secret: ${JWT_SECRET:}
+  ttl: ${JWT_TTL:7d}
+
+# 限流阈值配置（可按环境差异化）
+rate-limit:
+  admin:
+    captcha:
+      limit: ${RL_ADMIN_CAPTCHA_LIMIT:30}
+      window: ${RL_ADMIN_CAPTCHA_WINDOW:60s}
+    login:
+      limit: ${RL_ADMIN_LOGIN_LIMIT:20}
+      window: ${RL_ADMIN_LOGIN_WINDOW:60s}
 
 springdoc:
   default-flat-param-object: true
