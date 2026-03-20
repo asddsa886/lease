@@ -39,6 +39,8 @@ public enum ResultCodeEnum {
     APP_LOGIN_CODE_ERROR(506, "验证码错误"),
     APP_ACCOUNT_DISABLED_ERROR(507, "该用户已被禁用"),
     APP_REQUEST_TOO_FREQUENT(508, "请求过于频繁，请稍后再试"),
+    APP_SMS_SERVICE_ERROR(509, "短信服务异常，请稍后再试"),
+    APP_SMS_CLIENT_INIT_ERROR(510, "短信服务初始化失败"),
 
     TOKEN_EXPIRED(601, "token过期"),
     TOKEN_INVALID(602, "token非法");
