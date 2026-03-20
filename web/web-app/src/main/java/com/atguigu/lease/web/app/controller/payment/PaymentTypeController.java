@@ -1,14 +1,14 @@
 package com.atguigu.lease.web.app.controller.payment;
 
-
-import com.atguigu.lease.common.exception.LeaseException;
 import com.atguigu.lease.common.result.Result;
-import com.atguigu.lease.common.result.ResultCodeEnum;
 import com.atguigu.lease.model.entity.PaymentType;
 import com.atguigu.lease.web.app.service.PaymentTypeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -18,6 +18,7 @@ import java.util.List;
 
 @Tag(name = "支付方式接口")
 @RestController
+@Validated
 @RequestMapping("/app/payment")
 public class PaymentTypeController {
 
@@ -26,10 +27,8 @@ public class PaymentTypeController {
 
     @Operation(summary = "根据房间id获取可选支付方式列表")
     @GetMapping("listByRoomId")
-    public Result<List<PaymentType>> listByRoomId(@RequestParam Long id) {
-        if (id == null) {
-            throw new LeaseException(ResultCodeEnum.PARAM_ERROR);
-        }
+    public Result<List<PaymentType>> listByRoomId(@RequestParam @NotNull(message = "id不能为空")
+                                                  @Min(value = 1, message = "id必须>=1") Long id) {
         List<PaymentType> list = paymentTypeService.listByRoomId(id);
         return Result.ok(list);
     }

@@ -12,13 +12,17 @@ import com.atguigu.lease.web.app.vo.agreement.AgreementItemVo;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/app/agreement")
+@Validated
 @Tag(name = "租约信息")
 public class LeaseAgreementController {
 
@@ -35,14 +39,17 @@ public class LeaseAgreementController {
 
     @Operation(summary = "根据id获取租约详细信息")
     @GetMapping("getDetailById")
-    public Result<AgreementDetailVo> getDetailById(@RequestParam Long id) {
+    public Result<AgreementDetailVo> getDetailById(@RequestParam @NotNull(message = "id不能为空")
+                                                   @Min(value = 1, message = "id必须>=1") Long id) {
         AgreementDetailVo result = leaseAgreementService.getDetailById(id);
         return Result.ok(result);
     }
 
     @Operation(summary = "根据id更新租约状态", description = "用于确认租约和提前退租")
     @PostMapping("updateStatusById")
-    public Result updateStatusById(@RequestParam Long id, @RequestParam LeaseStatus leaseStatus) {
+    public Result updateStatusById(@RequestParam @NotNull(message = "id不能为空")
+                                   @Min(value = 1, message = "id必须>=1") Long id,
+                                   @RequestParam @NotNull(message = "leaseStatus不能为空") LeaseStatus leaseStatus) {
         LeaseAgreement leaseAgreement = leaseAgreementService.getById(id);
         if (leaseAgreement == null) {
             throw new LeaseException(ResultCodeEnum.DATA_ERROR);
@@ -80,9 +87,9 @@ public class LeaseAgreementController {
 
     @Operation(summary = "保存或更新租约", description = "用于续约")
     @PostMapping("saveOrUpdate")
-    public Result saveOrUpdate(@RequestBody LeaseAgreement leaseAgreement) {
+    public Result saveOrUpdate(@RequestBody @NotNull(message = "leaseAgreement不能为空") LeaseAgreement leaseAgreement) {
         // 安全加固：C 端不允许“新增租约”，只允许对自己的租约发起续约更新
-        if (leaseAgreement == null || leaseAgreement.getId() == null) {
+        if (leaseAgreement.getId() == null) {
             throw new LeaseException(ResultCodeEnum.ILLEGAL_REQUEST);
         }
 
