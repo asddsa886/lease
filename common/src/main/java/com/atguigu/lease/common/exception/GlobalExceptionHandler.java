@@ -17,9 +17,21 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @ControllerAdvice
+/**
+ * 作用：告诉 Spring，“这是一个全局控制器增强类”。
+ * 效果：它会自动扫描并应用到所有的 @Controller 或 @RestController 上。
+ * 你不需要在每个 Controller 里写 try-catch，这里写的逻辑对所有接口生效。
+ */
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
+    /**
+     * 作用：指定这个方法专门处理哪种类型的异常。
+     * 机制：当某个 Controller 抛出异常时，Spring 会拿着这个异常去匹配这里的方法。
+     * 如果是 MethodArgumentNotValidException，就调用第一个方法。
+     * 如果是 LeaseException，就调用第四个方法。
+     * 如果都不匹配，最后会落到 Exception.class（兜底）。
+     */
     @ResponseBody
     public Result handle(MethodArgumentNotValidException e) {
         // @RequestBody + @Valid 校验失败

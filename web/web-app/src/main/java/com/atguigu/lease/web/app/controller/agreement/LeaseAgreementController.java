@@ -71,7 +71,7 @@ public class LeaseAgreementController {
             throw new LeaseException(ResultCodeEnum.ILLEGAL_REQUEST);
         }
 
-        // 条件更新：防止并发/重复提交（状态已变化则更新失败）
+        // 条件更新：防止并发/重复提交（状态已变化则更新失败） 原子性操作
         LambdaUpdateWrapper<LeaseAgreement> updateWrapper = new LambdaUpdateWrapper<>();
         updateWrapper.eq(LeaseAgreement::getId, id);
         updateWrapper.eq(LeaseAgreement::getPhone, currentUserPhone);
