@@ -2,6 +2,7 @@ package com.atguigu.lease.web.app.controller.agreement;
 
 import com.atguigu.lease.common.exception.LeaseException;
 import com.atguigu.lease.common.login.LoginUserHolder;
+import com.atguigu.lease.common.mq.publisher.LeaseAgreementEventPublisher;
 import com.atguigu.lease.common.result.Result;
 import com.atguigu.lease.common.result.ResultCodeEnum;
 import com.atguigu.lease.model.entity.LeaseAgreement;
@@ -29,6 +30,10 @@ public class LeaseAgreementController {
     @Autowired
     private LeaseAgreementService leaseAgreementService;
 
+    @Autowired(required = false)
+    private LeaseAgreementEventPublisher leaseAgreementEventPublisher;
+
+    //todo 可以尝试加入redis缓存，提升个人租约列表的访问性能（热点数据缓存，过期时间短，更新时主动删除缓存）
     @Operation(summary = "获取个人租约基本信息列表")
     @GetMapping("listItem")
     public Result<List<AgreementItemVo>> listItem() {
@@ -82,6 +87,13 @@ public class LeaseAgreementController {
         if (!updated) {
             throw new LeaseException(ResultCodeEnum.REPEAT_SUBMIT);
         }
+
+        // 异步解耦：租约状态变更事件 -> MQ（通知/审计等下游）
+        if (leaseAgreementEventPublisher != null) {
+            leaseAgreementEventPublisher.publishStatusChanged(id, currentUserPhone,
+                    currentStatus == null ? null : currentStatus.name(),
+                    leaseStatus == null ? null : leaseStatus.name());
+        }
         return Result.ok();
     }
 
@@ -120,9 +132,20 @@ public class LeaseAgreementController {
         leaseAgreement.setSourceType(dbAgreement.getSourceType());
 
         // 续约进入待确认状态
+        LeaseStatus beforeStatus = dbAgreement.getStatus();
         leaseAgreement.setStatus(LeaseStatus.RENEWING);
 
         leaseAgreementService.updateById(leaseAgreement);
+
+        // 异步解耦：续约请求事件
+        if (leaseAgreementEventPublisher != null) {
+            leaseAgreementEventPublisher.publishRenewRequested(
+                    leaseAgreement.getId(),
+                    currentUserPhone,
+                    beforeStatus == null ? null : beforeStatus.name(),
+                    LeaseStatus.RENEWING.name()
+            );
+        }
         return Result.ok();
     }
 

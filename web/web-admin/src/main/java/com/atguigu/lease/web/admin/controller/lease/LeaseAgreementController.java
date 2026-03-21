@@ -2,6 +2,7 @@ package com.atguigu.lease.web.admin.controller.lease;
 
 
 import com.atguigu.lease.common.result.Result;
+import com.atguigu.lease.common.mq.publisher.LeaseAgreementEventPublisher;
 import com.atguigu.lease.model.entity.LeaseAgreement;
 import com.atguigu.lease.model.enums.LeaseStatus;
 import com.atguigu.lease.web.admin.service.LeaseAgreementService;
@@ -24,10 +25,23 @@ public class LeaseAgreementController {
     @Autowired
     private LeaseAgreementService leaseAgreementService;
 
+    @Autowired(required = false)
+    private LeaseAgreementEventPublisher leaseAgreementEventPublisher;
+
     @Operation(summary = "保存或修改租约信息")
     @PostMapping("saveOrUpdate")
     public Result saveOrUpdate(@RequestBody LeaseAgreement leaseAgreement) {
+        boolean created = leaseAgreement != null && leaseAgreement.getId() == null;
         leaseAgreementService.saveOrUpdate(leaseAgreement);
+
+        if (leaseAgreementEventPublisher != null && leaseAgreement != null) {
+            leaseAgreementEventPublisher.publishUpsert(
+                    leaseAgreement.getId(),
+                    leaseAgreement.getPhone(),
+                    leaseAgreement.getStatus() == null ? null : leaseAgreement.getStatus().name(),
+                    created
+            );
+        }
         return Result.ok();
     }
 
@@ -57,10 +71,20 @@ public class LeaseAgreementController {
     @Operation(summary = "根据id更新租约状态")
     @PostMapping("updateStatusById")
     public Result updateStatusById(@RequestParam Long id, @RequestParam LeaseStatus status) {
+        LeaseAgreement db = leaseAgreementService.getById(id);
+        LeaseStatus before = db == null ? null : db.getStatus();
+        String phone = db == null ? null : db.getPhone();
+
         LambdaUpdateWrapper<LeaseAgreement> updateWrapper = new LambdaUpdateWrapper<>();
         updateWrapper.eq(LeaseAgreement::getId, id);
         updateWrapper.set(LeaseAgreement::getStatus, status);
         leaseAgreementService.update(updateWrapper);
+
+        if (leaseAgreementEventPublisher != null) {
+            leaseAgreementEventPublisher.publishStatusChanged(id, phone,
+                    before == null ? null : before.name(),
+                    status == null ? null : status.name());
+        }
         return Result.ok();
     }
 

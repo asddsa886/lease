@@ -51,6 +51,7 @@ public class LoginController {
         // P0：接口稳定性（防刷）- 短信验证码按 IP + phone 双维度限流
         String ip = IpUtil.getClientIp(request);
 
+        // 规则
         RateLimitProperties.DimRule rule = rateLimitProperties.getApp().getSms();
 
         boolean ipAllowed = redisRateLimiter.tryAcquireSlidingWindow(

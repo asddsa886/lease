@@ -22,6 +22,18 @@ spring:
       port: 6379
       database: 0
 
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+
+mq:
+  enabled: ${MQ_ENABLED:true}
+
 springdoc:
   default-flat-param-object: true
 

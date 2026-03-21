@@ -29,6 +29,18 @@ spring:
       port: 6379
       database: 0
 
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+
+mq:
+  enabled: ${MQ_ENABLED:true}
+
 
 # 用于打印框架生成的 sql 语句，便于调试（建议仅在开发环境开启）
 # 关掉控制台刷屏：注释掉 StdOutImpl（会输出 Preparing/Parameters/SQLStructure 等）
