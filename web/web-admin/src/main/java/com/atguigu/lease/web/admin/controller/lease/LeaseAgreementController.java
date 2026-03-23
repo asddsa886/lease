@@ -14,6 +14,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 
@@ -30,6 +31,7 @@ public class LeaseAgreementController {
 
     @Operation(summary = "保存或修改租约信息")
     @PostMapping("saveOrUpdate")
+    @Transactional(rollbackFor = Exception.class)
     public Result saveOrUpdate(@RequestBody LeaseAgreement leaseAgreement) {
         boolean created = leaseAgreement != null && leaseAgreement.getId() == null;
         leaseAgreementService.saveOrUpdate(leaseAgreement);
@@ -70,6 +72,7 @@ public class LeaseAgreementController {
 
     @Operation(summary = "根据id更新租约状态")
     @PostMapping("updateStatusById")
+    @Transactional(rollbackFor = Exception.class)
     public Result updateStatusById(@RequestParam Long id, @RequestParam LeaseStatus status) {
         LeaseAgreement db = leaseAgreementService.getById(id);
         LeaseStatus before = db == null ? null : db.getStatus();

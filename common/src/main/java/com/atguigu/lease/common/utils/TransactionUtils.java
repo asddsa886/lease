@@ -8,6 +8,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * <p>
  * 用于缓存一致性：DB 更新成功提交后再删缓存，避免回滚导致缓存被误删。
  */
+// todo 事务回滚时执行回调（如补偿机制），可以参考： 好好学习
 public final class TransactionUtils {
 
     private TransactionUtils() {

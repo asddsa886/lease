@@ -16,10 +16,10 @@ import java.time.Instant;
 public class LeaseAgreementEvent implements Serializable {
 
     public enum Type {
-        CREATED,
-        UPDATED,
-        STATUS_CHANGED,
-        RENEW_REQUESTED
+        CREATED,// 租约创建
+        UPDATED,// 租约更新（如续约）
+        STATUS_CHANGED, // 租约状态变更（如待支付 -> 已支付 -> 已取消）
+        RENEW_REQUESTED // 续约请求（从租约服务发出，供其他服务监听后续处理，如通知房东/用户）
     }
 
     private Type type;

@@ -16,6 +16,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -52,6 +53,7 @@ public class LeaseAgreementController {
 
     @Operation(summary = "根据id更新租约状态", description = "用于确认租约和提前退租")
     @PostMapping("updateStatusById")
+    @Transactional(rollbackFor = Exception.class)
     public Result updateStatusById(@RequestParam @NotNull(message = "id不能为空")
                                    @Min(value = 1, message = "id必须>=1") Long id,
                                    @RequestParam @NotNull(message = "leaseStatus不能为空") LeaseStatus leaseStatus) {
@@ -99,6 +101,7 @@ public class LeaseAgreementController {
 
     @Operation(summary = "保存或更新租约", description = "用于续约")
     @PostMapping("saveOrUpdate")
+    @Transactional(rollbackFor = Exception.class)
     public Result saveOrUpdate(@RequestBody @NotNull(message = "leaseAgreement不能为空") LeaseAgreement leaseAgreement) {
         // 安全加固：C 端不允许“新增租约”，只允许对自己的租约发起续约更新
         if (leaseAgreement.getId() == null) {

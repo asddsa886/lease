@@ -46,6 +46,7 @@ public class LeaseAgreementEventPublisher {
         });
     }
 
+    // 状态变更事件：从租约服务发出，供其他服务监听后续处理，如通知房东/用户
     public void publishStatusChanged(Long agreementId, String phone, String before, String after) {
         LeaseAgreementEvent event = new LeaseAgreementEvent();
         event.setType(LeaseAgreementEvent.Type.STATUS_CHANGED);
@@ -58,6 +59,7 @@ public class LeaseAgreementEventPublisher {
         publish(event);
     }
 
+    // 续约请求事件：从租约服务发出，供其他服务监听后续处理，如通知房东/用户
     public void publishRenewRequested(Long agreementId, String phone, String before, String after) {
         LeaseAgreementEvent event = new LeaseAgreementEvent();
         event.setType(LeaseAgreementEvent.Type.RENEW_REQUESTED);
@@ -70,6 +72,7 @@ public class LeaseAgreementEventPublisher {
         publish(event);
     }
 
+    // 创建/更新事件（如续约）共用一个方法，区别在于 type 和 beforeStatus 可选
     public void publishUpsert(Long agreementId, String phone, String after, boolean created) {
         LeaseAgreementEvent event = new LeaseAgreementEvent();
         event.setType(created ? LeaseAgreementEvent.Type.CREATED : LeaseAgreementEvent.Type.UPDATED);
