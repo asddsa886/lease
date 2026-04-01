@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.atguigu.lease.common.mq.outbox.mapper.OutboxMessageMapper">
+
+    <select id="listPending" resultType="com.atguigu.lease.common.mq.outbox.entity.OutboxMessage">
+        SELECT
+            id,
+            biz,
+            biz_key AS bizKey,
+            exchange,
+            routing_key AS routingKey,
+            payload_type AS payloadType,
+            payload,
+            status,
+            try_count AS tryCount,
+            next_retry_at AS nextRetryAt,
+            last_error AS lastError,
+            create_time AS createTime,
+            update_time AS updateTime
+        FROM outbox_message
+        WHERE
+            status IN (0, 3)
+            AND (next_retry_at IS NULL OR next_retry_at &lt;= #{now})
+        ORDER BY id ASC
+        LIMIT #{limit}
+    </select>
+
+</mapper>

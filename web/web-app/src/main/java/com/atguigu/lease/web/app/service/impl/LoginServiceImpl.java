@@ -116,7 +116,7 @@ public class LoginServiceImpl implements LoginService {
         if (userInfo == null) {
             userInfo = new UserInfo();
             userInfo.setPhone(phone);
-            userInfo.setStatus(BaseStatus.DISABLE);
+            userInfo.setStatus(BaseStatus.ENABLE);
             userInfo.setNickname("用户-" + phone.substring(7));
             userInfoMapper.insert(userInfo);
         } else {

@@ -2,7 +2,10 @@ package com.atguigu.lease.common.mq.publisher;
 
 import com.atguigu.lease.common.mq.LeaseMqConstants;
 import com.atguigu.lease.common.mq.event.LeaseAgreementEvent;
+import com.atguigu.lease.common.mq.outbox.entity.OutboxMessage;
+import com.atguigu.lease.common.mq.outbox.service.OutboxService;
 import com.atguigu.lease.common.utils.TransactionUtils;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -12,7 +15,7 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 
 /**
- * 租约事件发布器：统一封装 routingKey、traceId 注入，并在事务提交后再发送，保障一致性。
+ * Publishes lease-agreement domain events through outbox first, then sends after commit.
  */
 @Slf4j
 @Component
@@ -20,33 +23,44 @@ import java.time.Instant;
 public class LeaseAgreementEventPublisher {
 
     private final RabbitTemplate rabbitTemplate;
+    private final ObjectMapper objectMapper;
+    private final OutboxService outboxService;
 
-    public LeaseAgreementEventPublisher(RabbitTemplate rabbitTemplate) {
+    public LeaseAgreementEventPublisher(RabbitTemplate rabbitTemplate,
+                                        ObjectMapper objectMapper,
+                                        OutboxService outboxService) {
         this.rabbitTemplate = rabbitTemplate;
+        this.objectMapper = objectMapper;
+        this.outboxService = outboxService;
     }
 
     public void publish(LeaseAgreementEvent event) {
+        publish(LeaseMqConstants.LEASE_AGREEMENT_EVENT_ROUTING_KEY, event);
+    }
+
+    public void publish(String routingKey, LeaseAgreementEvent event) {
         if (event == null) {
             return;
         }
-        // 事务提交后发送：避免 DB 回滚但消息已发导致下游脏读
-        TransactionUtils.runAfterCommit(() -> {
-            try {
-                rabbitTemplate.convertAndSend(
-                        LeaseMqConstants.LEASE_EXCHANGE,
-                        LeaseMqConstants.LEASE_AGREEMENT_EVENT_ROUTING_KEY,
-                        event
-                );
-                log.info("MQ published leaseAgreementEvent type={} agreementId={} traceId={}",
-                        event.getType(), event.getAgreementId(), event.getTraceId());
-            } catch (Exception e) {
-                // 生产级可接入重试/Outbox；这里先记录日志，避免影响主链路
-                log.error("MQ publish failed, event={}", event, e);
-            }
-        });
+
+        try {
+            OutboxMessage outbox = buildOutbox(routingKey, event);
+            OutboxMessage saved = outboxService.saveNew(outbox);
+            TransactionUtils.runAfterCommit(() -> outboxService.sendOne(saved.getId()));
+        } catch (Exception e) {
+            log.error("MQ outbox enqueue failed, routingKey={}, event={}", routingKey, event, e);
+            TransactionUtils.runAfterCommit(() -> {
+                try {
+                    rabbitTemplate.convertAndSend(LeaseMqConstants.LEASE_EXCHANGE, routingKey, event);
+                    log.info("MQ fallback publish routingKey={} type={} agreementId={}",
+                            routingKey, event.getType(), event.getAgreementId());
+                } catch (Exception ex) {
+                    log.error("MQ fallback publish failed, routingKey={}, event={}", routingKey, event, ex);
+                }
+            });
+        }
     }
 
-    // 状态变更事件：从租约服务发出，供其他服务监听后续处理，如通知房东/用户
     public void publishStatusChanged(Long agreementId, String phone, String before, String after) {
         LeaseAgreementEvent event = new LeaseAgreementEvent();
         event.setType(LeaseAgreementEvent.Type.STATUS_CHANGED);
@@ -59,7 +73,6 @@ public class LeaseAgreementEventPublisher {
         publish(event);
     }
 
-    // 续约请求事件：从租约服务发出，供其他服务监听后续处理，如通知房东/用户
     public void publishRenewRequested(Long agreementId, String phone, String before, String after) {
         LeaseAgreementEvent event = new LeaseAgreementEvent();
         event.setType(LeaseAgreementEvent.Type.RENEW_REQUESTED);
@@ -72,7 +85,6 @@ public class LeaseAgreementEventPublisher {
         publish(event);
     }
 
-    // 创建/更新事件（如续约）共用一个方法，区别在于 type 和 beforeStatus 可选
     public void publishUpsert(Long agreementId, String phone, String after, boolean created) {
         LeaseAgreementEvent event = new LeaseAgreementEvent();
         event.setType(created ? LeaseAgreementEvent.Type.CREATED : LeaseAgreementEvent.Type.UPDATED);
@@ -82,5 +94,28 @@ public class LeaseAgreementEventPublisher {
         event.setTraceId(MDC.get("traceId"));
         event.setOccurredAt(Instant.now());
         publish(event);
+    }
+
+    public void publishTimeoutCheck(Long agreementId, String phone, String expectedStatus, String timeoutStatus) {
+        LeaseAgreementEvent event = new LeaseAgreementEvent();
+        event.setType(LeaseAgreementEvent.Type.TIMEOUT_CHECK);
+        event.setAgreementId(agreementId);
+        event.setPhone(phone);
+        event.setBeforeStatus(expectedStatus);
+        event.setAfterStatus(timeoutStatus);
+        event.setTraceId(MDC.get("traceId"));
+        event.setOccurredAt(Instant.now());
+        publish(LeaseMqConstants.LEASE_AGREEMENT_TIMEOUT_DELAY_ROUTING_KEY, event);
+    }
+
+    private OutboxMessage buildOutbox(String routingKey, LeaseAgreementEvent event) throws Exception {
+        OutboxMessage outbox = new OutboxMessage();
+        outbox.setBiz("leaseAgreement");
+        outbox.setBizKey(event.getAgreementId() == null ? null : String.valueOf(event.getAgreementId()));
+        outbox.setExchange(LeaseMqConstants.LEASE_EXCHANGE);
+        outbox.setRoutingKey(routingKey);
+        outbox.setPayloadType(LeaseAgreementEvent.class.getName());
+        outbox.setPayload(objectMapper.writeValueAsString(event));
+        return outbox;
     }
 }

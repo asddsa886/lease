@@ -148,6 +148,12 @@ public class LeaseAgreementController {
                     beforeStatus == null ? null : beforeStatus.name(),
                     LeaseStatus.RENEWING.name()
             );
+            leaseAgreementEventPublisher.publishTimeoutCheck(
+                    leaseAgreement.getId(),
+                    currentUserPhone,
+                    LeaseStatus.RENEWING.name(),
+                    LeaseStatus.SIGNED.name()
+            );
         }
         return Result.ok();
     }

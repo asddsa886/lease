@@ -43,6 +43,7 @@ public class LeaseAgreementController {
                     leaseAgreement.getStatus() == null ? null : leaseAgreement.getStatus().name(),
                     created
             );
+            publishTimeoutIfPending(leaseAgreement.getId(), leaseAgreement.getPhone(), leaseAgreement.getStatus());
         }
         return Result.ok();
     }
@@ -87,8 +88,32 @@ public class LeaseAgreementController {
             leaseAgreementEventPublisher.publishStatusChanged(id, phone,
                     before == null ? null : before.name(),
                     status == null ? null : status.name());
+            publishTimeoutIfPending(id, phone, status);
         }
         return Result.ok();
+    }
+
+    private void publishTimeoutIfPending(Long agreementId, String phone, LeaseStatus status) {
+        if (leaseAgreementEventPublisher == null || agreementId == null || status == null) {
+            return;
+        }
+        if (status == LeaseStatus.SIGNING) {
+            leaseAgreementEventPublisher.publishTimeoutCheck(
+                    agreementId,
+                    phone,
+                    LeaseStatus.SIGNING.name(),
+                    LeaseStatus.CANCELED.name()
+            );
+            return;
+        }
+        if (status == LeaseStatus.RENEWING) {
+            leaseAgreementEventPublisher.publishTimeoutCheck(
+                    agreementId,
+                    phone,
+                    LeaseStatus.RENEWING.name(),
+                    LeaseStatus.SIGNED.name()
+            );
+        }
     }
 
 }
