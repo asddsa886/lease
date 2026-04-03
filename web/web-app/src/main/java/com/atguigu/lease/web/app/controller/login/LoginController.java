@@ -7,6 +7,8 @@ import com.atguigu.lease.common.ratelimit.RedisRateLimiter;
 import com.atguigu.lease.common.ratelimit.RateLimitProperties;
 import com.atguigu.lease.common.result.Result;
 import com.atguigu.lease.common.result.ResultCodeEnum;
+import com.atguigu.lease.common.security.JwtTokenResolver;
+import com.atguigu.lease.common.security.TokenBlacklistService;
 import com.atguigu.lease.common.utils.IpUtil;
 import com.atguigu.lease.web.app.service.LoginService;
 import com.atguigu.lease.web.app.service.UserInfoService;
@@ -40,6 +42,9 @@ public class LoginController {
 
     @Autowired
     private RateLimitProperties rateLimitProperties;
+
+    @Autowired
+    private TokenBlacklistService tokenBlacklistService;
  
     @GetMapping("login/getCode")
     @Operation(summary = "获取短信验证码")
@@ -112,6 +117,14 @@ public class LoginController {
         Long userId = LoginUserHolder.get().getId();
         UserInfoVo infoVo = loginService.getLoginUserById(userId);
         return Result.ok(infoVo);
+    }
+
+    @PostMapping("logout")
+    @Operation(summary = "退出登录")
+    public Result<Void> logout(HttpServletRequest request) {
+        String token = JwtTokenResolver.resolve(request);
+        tokenBlacklistService.blacklist(token);
+        return Result.ok();
     }
 }
  

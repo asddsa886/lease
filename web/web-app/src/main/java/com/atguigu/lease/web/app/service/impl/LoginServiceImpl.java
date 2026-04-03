@@ -3,6 +3,7 @@ package com.atguigu.lease.web.app.service.impl;
 import com.atguigu.lease.common.constant.RedisConstant.RedisConstant;
 import com.atguigu.lease.common.exception.LeaseException;
 import com.atguigu.lease.common.result.ResultCodeEnum;
+import com.atguigu.lease.common.security.TokenClientType;
 import com.atguigu.lease.common.utils.CodeUtil;
 import com.atguigu.lease.common.utils.JwtUtil;
 import com.atguigu.lease.model.entity.UserInfo;
@@ -125,7 +126,7 @@ public class LoginServiceImpl implements LoginService {
             }
         }
 
-        return JwtUtil.creatToken(userInfo.getId(), userInfo.getPhone());
+        return JwtUtil.creatToken(userInfo.getId(), userInfo.getPhone(), TokenClientType.APP);
     }
 
     @Override

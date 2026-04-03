@@ -7,6 +7,8 @@ import com.atguigu.lease.common.ratelimit.RedisRateLimiter;
 import com.atguigu.lease.common.ratelimit.RateLimitProperties;
 import com.atguigu.lease.common.result.Result;
 import com.atguigu.lease.common.result.ResultCodeEnum;
+import com.atguigu.lease.common.security.JwtTokenResolver;
+import com.atguigu.lease.common.security.TokenBlacklistService;
 import com.atguigu.lease.common.utils.IpUtil;
 import com.atguigu.lease.web.admin.service.LoginService;
 import com.atguigu.lease.web.admin.vo.login.CaptchaVo;
@@ -35,6 +37,9 @@ public class LoginController {
 
     @Autowired
     private RateLimitProperties rateLimitProperties;
+
+    @Autowired
+    private TokenBlacklistService tokenBlacklistService;
  
     @Operation(summary = "获取图形验证码")
     @GetMapping("login/captcha")
@@ -74,5 +79,13 @@ public class LoginController {
         Long userId = LoginUserHolder.get().getId();
         SystemUserInfoVo systemUserInfoVo = loginService.getLoginUserInfoById(userId);
         return Result.ok(systemUserInfoVo);
+    }
+
+    @Operation(summary = "退出登录")
+    @PostMapping("logout")
+    public Result<Void> logout(HttpServletRequest request) {
+        String token = JwtTokenResolver.resolve(request);
+        tokenBlacklistService.blacklist(token);
+        return Result.ok();
     }
 }

@@ -2,6 +2,7 @@ package com.atguigu.lease.common.utils;
 
 import com.atguigu.lease.common.exception.LeaseException;
 import com.atguigu.lease.common.jwt.JwtProperties;
+import com.atguigu.lease.common.security.TokenClientType;
 import com.atguigu.lease.common.result.ResultCodeEnum;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
@@ -53,14 +54,20 @@ public class JwtUtil {
     }
 
     public static String creatToken(Long userId, String username) {
+        return creatToken(userId, username, null);
+    }
+
+    public static String creatToken(Long userId, String username, TokenClientType clientType) {
         long expMs = System.currentTimeMillis() + ttl.toMillis();
-        return Jwts.builder()
+        JwtBuilder builder = Jwts.builder()
                 .setExpiration(new Date(expMs))
                 .setSubject("LOGIN_USER")
                 .claim("userId", userId)
-                .claim("username", username)
-                .signWith(secretKey, SignatureAlgorithm.HS256)
-                .compact();
+                .claim("username", username);
+        if (clientType != null) {
+            builder.claim("clientType", clientType.name());
+        }
+        return builder.signWith(secretKey, SignatureAlgorithm.HS256).compact();
     }
 
     public static Claims parseToken(String token) {

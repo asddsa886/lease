@@ -2,6 +2,7 @@ package com.atguigu.lease.web.admin.service.impl;
 
 import com.atguigu.lease.common.exception.LeaseException;
 import com.atguigu.lease.common.result.ResultCodeEnum;
+import com.atguigu.lease.common.security.TokenClientType;
 import com.atguigu.lease.common.utils.JwtUtil;
 import com.atguigu.lease.model.entity.SystemUser;
 import com.atguigu.lease.model.enums.BaseStatus;
@@ -116,7 +117,7 @@ public class LoginServiceImpl implements LoginService {
             throw new LeaseException(ResultCodeEnum.ADMIN_ACCOUNT_ERROR);
         }
 
-        return JwtUtil.creatToken(systemUser.getId(), systemUser.getUsername());
+        return JwtUtil.creatToken(systemUser.getId(), systemUser.getUsername(), TokenClientType.ADMIN);
     }
 
     private static boolean isBcryptHash(String hash) {
