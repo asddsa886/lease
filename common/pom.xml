@@ -67,6 +67,12 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>org.redisson</groupId>
+            <artifactId>redisson</artifactId>
+            <version>${redisson.version}</version>
+        </dependency>
+
         <!-- RabbitMQ（AMQP）：用于业务事件异步解耦（租约/订单事件等） -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
