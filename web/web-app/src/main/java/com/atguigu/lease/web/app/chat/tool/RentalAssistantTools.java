@@ -3,11 +3,11 @@ package com.atguigu.lease.web.app.chat.tool;
 import com.atguigu.lease.common.login.LoginUser;
 import com.atguigu.lease.common.login.LoginUserHolder;
 import com.atguigu.lease.model.entity.ApartmentInfo;
+import com.atguigu.lease.model.entity.CityInfo;
 import com.atguigu.lease.model.entity.DistrictInfo;
 import com.atguigu.lease.model.entity.LabelInfo;
 import com.atguigu.lease.model.entity.LeaseTerm;
 import com.atguigu.lease.model.entity.PaymentType;
-import com.atguigu.lease.model.entity.CityInfo;
 import com.atguigu.lease.model.entity.ProvinceInfo;
 import com.atguigu.lease.model.entity.RoomInfo;
 import com.atguigu.lease.model.enums.AppointmentStatus;
@@ -69,9 +69,9 @@ public class RentalAssistantTools {
     private final AssistantProperties assistantProperties;
     private final ObjectMapper objectMapper;
 
-    @Tool("按条件查询房源列表。可根据区县名称、最低月租、最高月租筛选房源。")
+    @Tool("按条件查询房源列表，可根据省市区名称、最低月租、最高月租筛选房源。")
     public String searchRooms(
-            @P(value = "区县名称，例如朝阳区", required = false) String districtName,
+            @P(value = "区域名称，例如北京市、朝阳区", required = false) String districtName,
             @P(value = "最低月租，单位元", required = false) BigDecimal minRent,
             @P(value = "最高月租，单位元", required = false) BigDecimal maxRent) {
         LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
@@ -114,7 +114,7 @@ public class RentalAssistantTools {
         return buildRoomDetailPayload(detail, "已获取房间详情。");
     }
 
-    @Tool("根据公寓名、小区名、房号等线索查询房间详情。适合处理“温都水城社区101介绍一下”这类问题。")
+    @Tool("根据公寓名、小区名、房号等线索查询房间详情，适合处理“温都水城社区101介绍一下”这类问题。")
     public String getRoomDetailByKeyword(@P("房间线索，例如温都水城社区101") String roomKeyword) {
         if (!StringUtils.hasText(roomKeyword)) {
             return toJson(Map.of("tool", "getRoomDetailByKeyword", "summary", "请提供公寓名或房号线索。"));
@@ -133,7 +133,7 @@ public class RentalAssistantTools {
         if (roomInfo == null) {
             return toJson(Map.of(
                     "tool", "getRoomDetailByKeyword",
-                    "summary", "找到了相关公寓，但没有定位到具体房间，请补充房号后再试。"
+                    "summary", "找到相关公寓了，但没有定位到具体房间，请补充房号后再试。"
             ));
         }
 
@@ -172,13 +172,13 @@ public class RentalAssistantTools {
         return toJson(payload);
     }
 
-    private Map<String, Object> buildSearchFilters(RegionMatch regionMatch, String districtName, BigDecimal minRent, BigDecimal maxRent) {
+    private Map<String, Object> buildSearchFilters(RegionMatch regionMatch, String regionKeyword, BigDecimal minRent, BigDecimal maxRent) {
         LinkedHashMap<String, Object> filters = new LinkedHashMap<>();
         if (regionMatch != null) {
             filters.put("regionKeyword", regionMatch.name());
             filters.put("regionLevel", regionMatch.level());
-        } else if (StringUtils.hasText(districtName)) {
-            filters.put("regionKeyword", districtName.trim());
+        } else if (StringUtils.hasText(regionKeyword)) {
+            filters.put("regionKeyword", regionKeyword.trim());
         }
         if (minRent != null) {
             filters.put("minRent", minRent);
@@ -504,11 +504,14 @@ public class RentalAssistantTools {
         return provinceInfoService.getOne(likeWrapper, false);
     }
 
-    private record RegionMatch(String level, String name, Long provinceId, Long cityId, Long districtId) {
-    }
-
     private RoomKeywordParts parseRoomKeyword(String roomKeyword) {
-        String normalized = roomKeyword.trim().replace("介绍一下", "").replace("介绍介绍", "").replace("介绍", "").trim();
+        String normalized = roomKeyword.trim()
+                .replace("这个介绍一下", "")
+                .replace("介绍介绍", "")
+                .replace("介绍一下", "")
+                .replace("介绍", "")
+                .trim();
+
         Matcher matcher = ROOM_HINT_PATTERN.matcher(normalized);
         if (matcher.matches()) {
             String apartmentKeyword = matcher.group(1) == null ? "" : matcher.group(1).trim();
@@ -556,6 +559,9 @@ public class RentalAssistantTools {
             }
         }
         return null;
+    }
+
+    private record RegionMatch(String level, String name, Long provinceId, Long cityId, Long districtId) {
     }
 
     private record RoomKeywordParts(String apartmentKeyword, String roomNumber) {

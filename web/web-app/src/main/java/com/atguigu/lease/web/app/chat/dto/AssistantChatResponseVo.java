@@ -13,9 +13,9 @@ import java.util.List;
 @Schema(description = "智能助手响应体")
 public class AssistantChatResponseVo {
 
-    @Schema(description = "助手回复")
+    @Schema(description = "助手自然语言回复")
     private String reply;
 
-    @Schema(description = "按段落拆分后的回复，方便测试和前端渲染")
+    @Schema(description = "按段落拆分后的回复，便于前端展示")
     private List<String> paragraphs;
 }

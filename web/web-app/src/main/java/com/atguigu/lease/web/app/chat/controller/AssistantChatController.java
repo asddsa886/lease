@@ -12,9 +12,11 @@ import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @RequiredArgsConstructor
@@ -28,7 +30,6 @@ public class AssistantChatController {
             summary = "租房助手对话",
             description = """
                     用于和租房智能助手对话。
-
                     当前支持：
                     1. 查询房源列表
                     2. 查询房间详情
@@ -58,5 +59,23 @@ public class AssistantChatController {
     @PostMapping("/chat")
     public Result<AssistantChatResponseVo> chat(@org.springframework.web.bind.annotation.RequestBody @Valid AssistantChatRequestVo requestVo) {
         return Result.ok(assistantChatService.chat(requestVo.getMessage()));
+    }
+
+    @Operation(
+            summary = "租房助手流式对话",
+            description = """
+                    使用 SSE 流式返回助手输出。
+                    事件类型包括：
+                    - start：开始生成
+                    - delta：增量文本
+                    - tool_call：即将调用工具
+                    - tool_result：工具执行完成
+                    - complete：完整回复
+                    - error：发生异常
+                    """
+    )
+    @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter stream(@org.springframework.web.bind.annotation.RequestBody @Valid AssistantChatRequestVo requestVo) {
+        return assistantChatService.stream(requestVo.getMessage());
     }
 }

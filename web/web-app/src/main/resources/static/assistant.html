@@ -125,6 +125,75 @@
             line-height: 1.6;
         }
 
+        .stream-box {
+            margin-top: 18px;
+            padding: 14px 16px;
+            border-radius: 18px;
+            background: rgba(23, 98, 75, 0.05);
+            border: 1px solid rgba(23, 98, 75, 0.12);
+        }
+
+        .stream-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .stream-label {
+            font-size: 14px;
+            color: var(--text);
+        }
+
+        .stream-tip {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 52px;
+            height: 30px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            inset: 0;
+            background: rgba(76, 57, 39, 0.18);
+            transition: 0.2s;
+            border-radius: 999px;
+        }
+
+        .slider::before {
+            position: absolute;
+            content: "";
+            height: 22px;
+            width: 22px;
+            left: 4px;
+            top: 4px;
+            background: #fff;
+            transition: 0.2s;
+            border-radius: 50%;
+        }
+
+        .switch input:checked + .slider {
+            background: var(--accent);
+        }
+
+        .switch input:checked + .slider::before {
+            transform: translateX(22px);
+        }
+
         .chat {
             display: flex;
             flex-direction: column;
@@ -286,7 +355,8 @@
         <span class="eyebrow">LEASE ASSISTANT</span>
         <h1>租房智能助手</h1>
         <p class="intro">
-            这是一个最小可用聊天页，适合替代 `doc.html` 做联调。页面会保留换行显示，工具查询结果也会比原始 JSON 更自然。
+            这是一个本地调试聊天页，默认走流式输出，也可以切回普通 JSON 接口做对比。
+            页面会保留换行和段落，适合观察工具调用后的最终回复效果。
         </p>
 
         <h2>当前支持</h2>
@@ -300,9 +370,22 @@
 
         <div class="token-box">
             <label for="tokenInput">Access Token</label>
-            <input id="tokenInput" type="text" placeholder="粘贴 access-token，可保存在浏览器本地">
+            <input id="tokenInput" type="text" placeholder="粘贴 access-token，可保存到浏览器本地">
             <div class="token-tip">
                 如果要查“我的预约/我的租约”，需要先登录并填入 token。页面会自动保存到浏览器本地。
+            </div>
+        </div>
+
+        <div class="stream-box">
+            <div class="stream-row">
+                <span class="stream-label">使用流式输出</span>
+                <label class="switch" for="streamToggle">
+                    <input id="streamToggle" type="checkbox">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="stream-tip">
+                开启后会调用 <code>/app/assistant/chat/stream</code>，边生成边展示；关闭后走普通 JSON 接口。
             </div>
         </div>
     </aside>
@@ -310,7 +393,7 @@
     <section class="panel chat">
         <div class="chat-header">
             <h2 class="chat-title">对话测试</h2>
-            <p class="chat-subtitle">建议先试示例问题，再观察回复排版和工具调用结果。</p>
+            <p class="chat-subtitle">建议先试示例问题，再观察回复排版、位置描述和流式效果。</p>
             <div class="suggestions">
                 <button class="suggestion-chip" type="button" data-text="你可以帮我做什么？">你可以帮我做什么？</button>
                 <button class="suggestion-chip" type="button" data-text="帮我查一下朝阳区 3000 以内的房源">房源查询</button>
@@ -324,7 +407,7 @@
         </div>
 
         <div class="composer">
-            <textarea id="messageInput" placeholder="输入问题，例如：帮我查一下朝阳区 3000 以内的房源"></textarea>
+            <textarea id="messageInput" placeholder="输入问题，例如：帮我查一下北京市 3000 以内的房源"></textarea>
             <div class="composer-footer">
                 <div id="statusText" class="status">等待发送</div>
                 <div class="actions">
@@ -343,13 +426,20 @@
     const sendBtn = document.getElementById('sendBtn');
     const clearBtn = document.getElementById('clearBtn');
     const statusText = document.getElementById('statusText');
+    const streamToggle = document.getElementById('streamToggle');
 
     const TOKEN_KEY = 'lease-assistant-token';
+    const STREAM_KEY = 'lease-assistant-stream-enabled';
 
     tokenInput.value = localStorage.getItem(TOKEN_KEY) || '';
+    streamToggle.checked = localStorage.getItem(STREAM_KEY) !== 'false';
 
     tokenInput.addEventListener('input', () => {
         localStorage.setItem(TOKEN_KEY, tokenInput.value.trim());
+    });
+
+    streamToggle.addEventListener('change', () => {
+        localStorage.setItem(STREAM_KEY, String(streamToggle.checked));
     });
 
     document.querySelectorAll('.suggestion-chip').forEach((button) => {
@@ -372,19 +462,25 @@
 
     sendBtn.addEventListener('click', sendMessage);
 
-    function appendMessage(role, text) {
+    function appendMessage(role, text = '') {
         const node = document.createElement('div');
         node.className = `message ${role}`;
         node.textContent = text;
         messages.appendChild(node);
         messages.scrollTop = messages.scrollHeight;
+        return node;
     }
 
-    function appendAssistantReply(data) {
+    function updateMessage(node, text) {
+        node.textContent = text;
+        messages.scrollTop = messages.scrollHeight;
+    }
+
+    function renderAssistantReply(node, data) {
         const paragraphs = data && Array.isArray(data.paragraphs) && data.paragraphs.length > 0
             ? data.paragraphs
             : [data && data.reply ? data.reply : '助手没有返回内容'];
-        appendMessage('assistant', paragraphs.join('\n\n'));
+        updateMessage(node, paragraphs.join('\n\n'));
     }
 
     async function sendMessage() {
@@ -396,40 +492,146 @@
 
         const token = tokenInput.value.trim();
         appendMessage('user', message);
+        const assistantNode = appendMessage('assistant', '');
         messageInput.value = '';
-        statusText.textContent = '正在等待助手回复...';
         sendBtn.disabled = true;
+        statusText.textContent = streamToggle.checked ? '正在建立流式连接...' : '正在等待助手回复...';
 
         try {
-            const headers = {
-                'Content-Type': 'application/json'
-            };
-            if (token) {
-                headers['access-token'] = token;
+            if (streamToggle.checked) {
+                await sendStreamingMessage(message, token, assistantNode);
+            } else {
+                await sendStandardMessage(message, token, assistantNode);
             }
-
-            const response = await fetch('/app/assistant/chat', {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({message})
-            });
-
-            const result = await response.json();
-            if (!response.ok || !result || result.code !== 200) {
-                const errorMessage = result && result.message ? result.message : '请求失败，请稍后重试';
-                appendMessage('assistant', errorMessage);
-                statusText.textContent = '请求失败';
-                return;
-            }
-
-            appendAssistantReply(result.data);
-            statusText.textContent = '回复完成';
         } catch (error) {
-            appendMessage('assistant', '请求失败，请检查服务是否启动，以及 token 是否有效。');
+            updateMessage(assistantNode, '请求失败，请检查服务是否启动，以及 token 是否有效。');
             statusText.textContent = '网络异常';
         } finally {
             sendBtn.disabled = false;
             messageInput.focus();
+        }
+    }
+
+    async function sendStandardMessage(message, token, assistantNode) {
+        const headers = {'Content-Type': 'application/json'};
+        if (token) {
+            headers['access-token'] = token;
+        }
+
+        const response = await fetch('/app/assistant/chat', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({message})
+        });
+
+        const result = await response.json();
+        if (!response.ok || !result || result.code !== 200) {
+            updateMessage(assistantNode, result && result.message ? result.message : '请求失败，请稍后再试');
+            statusText.textContent = '请求失败';
+            return;
+        }
+
+        renderAssistantReply(assistantNode, result.data);
+        statusText.textContent = '回复完成';
+    }
+
+    async function sendStreamingMessage(message, token, assistantNode) {
+        const headers = {'Content-Type': 'application/json'};
+        if (token) {
+            headers['access-token'] = token;
+        }
+
+        const response = await fetch('/app/assistant/chat/stream', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({message})
+        });
+
+        if (!response.ok || !response.body) {
+            const text = await response.text();
+            updateMessage(assistantNode, text || '流式请求失败，请稍后再试');
+            statusText.textContent = '请求失败';
+            return;
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+            const {value, done} = await reader.read();
+            if (done) {
+                break;
+            }
+
+            buffer += decoder.decode(value, {stream: true}).replace(/\r\n/g, '\n');
+            let boundary = buffer.indexOf('\n\n');
+            while (boundary !== -1) {
+                const rawEvent = buffer.slice(0, boundary);
+                buffer = buffer.slice(boundary + 2);
+                handleSseEvent(rawEvent, assistantNode);
+                boundary = buffer.indexOf('\n\n');
+            }
+        }
+
+        if (buffer.trim()) {
+            handleSseEvent(buffer, assistantNode);
+        }
+    }
+
+    function handleSseEvent(rawEvent, assistantNode) {
+        if (!rawEvent.trim()) {
+            return;
+        }
+
+        const lines = rawEvent.split('\n');
+        let eventName = 'message';
+        const dataLines = [];
+
+        for (const line of lines) {
+            if (line.startsWith('event:')) {
+                eventName = line.slice(6).trim();
+            } else if (line.startsWith('data:')) {
+                dataLines.push(line.slice(5).trimStart());
+            }
+        }
+
+        const rawData = dataLines.join('\n');
+        let payload = rawData;
+        try {
+            payload = JSON.parse(rawData);
+        } catch (error) {
+            payload = {message: rawData};
+        }
+
+        switch (eventName) {
+            case 'start':
+                statusText.textContent = payload.message || '开始生成回复...';
+                break;
+            case 'delta':
+                updateMessage(assistantNode, assistantNode.textContent + (payload.content || ''));
+                statusText.textContent = '正在生成回复...';
+                break;
+            case 'tool_call':
+                statusText.textContent = payload.toolName
+                    ? `正在调用工具：${payload.toolName}`
+                    : '正在调用工具...';
+                break;
+            case 'tool_result':
+                statusText.textContent = payload.toolName
+                    ? `工具 ${payload.toolName} 已返回`
+                    : '工具调用完成';
+                break;
+            case 'complete':
+                renderAssistantReply(assistantNode, payload);
+                statusText.textContent = '回复完成';
+                break;
+            case 'error':
+                updateMessage(assistantNode, payload.message || '流式调用失败，请稍后再试');
+                statusText.textContent = '请求失败';
+                break;
+            default:
+                break;
         }
     }
 </script>

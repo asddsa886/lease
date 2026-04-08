@@ -123,6 +123,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
     }
 
+    @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+        return false;
+    }
+
     /**
      * 将项目业务异常映射为 token 相关错误码。
      * <p>
