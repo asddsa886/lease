@@ -36,12 +36,15 @@ public class AssistantChatController {
                     3. 查询我的预约
                     4. 查询我的租约
                     5. 简单闲聊和常识问答
+                    6. 支持 conversationId 的多轮上下文
+                    7. 支持基于本地知识库的租房术语和流程问答
 
                     可直接尝试：
                     - 帮我查一下朝阳区 3000 以内的房源
                     - 帮我看看我有哪些预约
                     - 帮我看看我有哪些租约
                     - 你可以帮我做什么？
+                    - 押一付三是什么意思？
                     """
     )
     @RequestBody(
@@ -52,13 +55,14 @@ public class AssistantChatController {
                             @ExampleObject(name = "能力说明", value = "{\"message\":\"你可以帮我做什么？\"}"),
                             @ExampleObject(name = "房源查询", value = "{\"message\":\"帮我查一下朝阳区 3000 以内的房源\"}"),
                             @ExampleObject(name = "我的预约", value = "{\"message\":\"帮我看看我有哪些预约\"}"),
-                            @ExampleObject(name = "我的租约", value = "{\"message\":\"帮我看看我有哪些租约\"}")
+                            @ExampleObject(name = "我的租约", value = "{\"message\":\"帮我看看我有哪些租约\"}"),
+                            @ExampleObject(name = "多轮会话", value = "{\"conversationId\":\"room-chat-001\",\"message\":\"第二个房源详细说说\"}")
                     }
             )
     )
     @PostMapping("/chat")
     public Result<AssistantChatResponseVo> chat(@org.springframework.web.bind.annotation.RequestBody @Valid AssistantChatRequestVo requestVo) {
-        return Result.ok(assistantChatService.chat(requestVo.getMessage()));
+        return Result.ok(assistantChatService.chat(requestVo.getMessage(), requestVo.getConversationId()));
     }
 
     @Operation(
@@ -72,10 +76,12 @@ public class AssistantChatController {
                     - tool_result：工具执行完成
                     - complete：完整回复
                     - error：发生异常
+
+                    可选传入 conversationId，用于保持多轮上下文。
                     """
     )
     @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream(@org.springframework.web.bind.annotation.RequestBody @Valid AssistantChatRequestVo requestVo) {
-        return assistantChatService.stream(requestVo.getMessage());
+        return assistantChatService.stream(requestVo.getMessage(), requestVo.getConversationId());
     }
 }

@@ -13,6 +13,9 @@ import java.util.List;
 @Schema(description = "智能助手响应体")
 public class AssistantChatResponseVo {
 
+    @Schema(description = "当前会话ID，前端应复用该值继续多轮对话")
+    private String conversationId;
+
     @Schema(description = "助手自然语言回复")
     private String reply;
 

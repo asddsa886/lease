@@ -19,10 +19,7 @@
             --shadow: 0 18px 45px rgba(83, 60, 33, 0.12);
         }
 
-        * {
-            box-sizing: border-box;
-        }
-
+        * { box-sizing: border-box; }
         body {
             margin: 0;
             min-height: 100vh;
@@ -36,7 +33,7 @@
         }
 
         .shell {
-            max-width: 1080px;
+            max-width: 1160px;
             margin: 0 auto;
             display: grid;
             grid-template-columns: 320px minmax(0, 1fr);
@@ -51,9 +48,7 @@
             backdrop-filter: blur(10px);
         }
 
-        .sidebar {
-            padding: 28px 24px;
-        }
+        .sidebar { padding: 28px 24px; }
 
         .eyebrow {
             display: inline-flex;
@@ -93,22 +88,22 @@
             font-size: 14px;
         }
 
-        .token-box {
+        .info-box {
             margin-top: 18px;
             padding: 16px;
-            border: 1px dashed rgba(23, 98, 75, 0.28);
             border-radius: 18px;
+            border: 1px dashed rgba(23, 98, 75, 0.28);
             background: rgba(255, 255, 255, 0.55);
         }
 
-        .token-box label {
+        .info-box label {
             display: block;
             margin-bottom: 8px;
             font-size: 13px;
             color: var(--muted);
         }
 
-        .token-box input {
+        .info-box input {
             width: 100%;
             border: 1px solid var(--line);
             border-radius: 14px;
@@ -118,11 +113,19 @@
             background: rgba(255, 255, 255, 0.95);
         }
 
-        .token-tip {
+        .tip {
             margin-top: 8px;
             color: var(--muted);
             font-size: 12px;
             line-height: 1.6;
+        }
+
+        .conversation-id {
+            margin-top: 12px;
+            font-size: 12px;
+            line-height: 1.6;
+            color: var(--accent-strong);
+            word-break: break-all;
         }
 
         .stream-box {
@@ -138,18 +141,6 @@
             justify-content: space-between;
             align-items: center;
             gap: 12px;
-        }
-
-        .stream-label {
-            font-size: 14px;
-            color: var(--text);
-        }
-
-        .stream-tip {
-            margin-top: 8px;
-            color: var(--muted);
-            font-size: 12px;
-            line-height: 1.6;
         }
 
         .switch {
@@ -186,13 +177,8 @@
             border-radius: 50%;
         }
 
-        .switch input:checked + .slider {
-            background: var(--accent);
-        }
-
-        .switch input:checked + .slider::before {
-            transform: translateX(22px);
-        }
+        .switch input:checked + .slider { background: var(--accent); }
+        .switch input:checked + .slider::before { transform: translateX(22px); }
 
         .chat {
             display: flex;
@@ -329,23 +315,15 @@
             cursor: not-allowed;
         }
 
-        .clear-btn {
+        .secondary-btn {
             background: rgba(76, 57, 39, 0.08);
             color: var(--text);
         }
 
         @media (max-width: 960px) {
-            .shell {
-                grid-template-columns: 1fr;
-            }
-
-            .chat {
-                min-height: 72vh;
-            }
-
-            .message {
-                max-width: 100%;
-            }
+            .shell { grid-template-columns: 1fr; }
+            .chat { min-height: 72vh; }
+            .message { max-width: 100%; }
         }
     </style>
 </head>
@@ -356,7 +334,7 @@
         <h1>租房智能助手</h1>
         <p class="intro">
             这是一个本地调试聊天页，默认走流式输出，也可以切回普通 JSON 接口做对比。
-            页面会保留换行和段落，适合观察工具调用后的最终回复效果。
+            页面会保留换行和段落，也会自动带上会话 ID，方便测试多轮上下文、Mongo 记忆和本地知识库问答。
         </p>
 
         <h2>当前支持</h2>
@@ -365,26 +343,37 @@
             <li>查看房间详情</li>
             <li>查看我的预约</li>
             <li>查看我的租约</li>
+            <li>多轮上下文记忆</li>
+            <li>租房术语与流程问答</li>
             <li>简单闲聊与常识问答</li>
         </ul>
 
-        <div class="token-box">
+        <div class="info-box">
             <label for="tokenInput">Access Token</label>
             <input id="tokenInput" type="text" placeholder="粘贴 access-token，可保存到浏览器本地">
-            <div class="token-tip">
-                如果要查“我的预约/我的租约”，需要先登录并填入 token。页面会自动保存到浏览器本地。
+            <div class="tip">
+                如果要查“我的预约 / 我的租约”，需要先登录并填写 token。页面会自动保存在浏览器本地。
             </div>
+        </div>
+
+        <div class="info-box">
+            <label for="conversationInput">Conversation ID</label>
+            <input id="conversationInput" type="text" placeholder="留空则自动生成">
+            <div class="tip">
+                同一个会话 ID 会持续复用上下文。点击“新会话”会重新生成并清空当前聊天内容。
+            </div>
+            <div id="conversationPreview" class="conversation-id"></div>
         </div>
 
         <div class="stream-box">
             <div class="stream-row">
-                <span class="stream-label">使用流式输出</span>
+                <span>使用流式输出</span>
                 <label class="switch" for="streamToggle">
                     <input id="streamToggle" type="checkbox">
                     <span class="slider"></span>
                 </label>
             </div>
-            <div class="stream-tip">
+            <div class="tip">
                 开启后会调用 <code>/app/assistant/chat/stream</code>，边生成边展示；关闭后走普通 JSON 接口。
             </div>
         </div>
@@ -393,12 +382,12 @@
     <section class="panel chat">
         <div class="chat-header">
             <h2 class="chat-title">对话测试</h2>
-            <p class="chat-subtitle">建议先试示例问题，再观察回复排版、位置描述和流式效果。</p>
+            <p class="chat-subtitle">可以先试示例问题，再继续追问“第二个房源呢”“这个房间介绍一下”这种多轮问题。</p>
             <div class="suggestions">
-                <button class="suggestion-chip" type="button" data-text="你可以帮我做什么？">你可以帮我做什么？</button>
-                <button class="suggestion-chip" type="button" data-text="帮我查一下朝阳区 3000 以内的房源">房源查询</button>
-                <button class="suggestion-chip" type="button" data-text="帮我看看我有哪些预约">我的预约</button>
-                <button class="suggestion-chip" type="button" data-text="帮我看看我有哪些租约">我的租约</button>
+                <button class="suggestion-chip" type="button" data-text="你可以帮我做什么？">能力说明</button>
+                <button class="suggestion-chip" type="button" data-text="帮我查一下北京市 3000 以内的房源">北京市房源</button>
+                <button class="suggestion-chip" type="button" data-text="押一付三是什么意思？">术语解释</button>
+                <button class="suggestion-chip" type="button" data-text="预约看房的流程是什么？">流程问答</button>
             </div>
         </div>
 
@@ -411,7 +400,7 @@
             <div class="composer-footer">
                 <div id="statusText" class="status">等待发送</div>
                 <div class="actions">
-                    <button id="clearBtn" class="clear-btn" type="button">清空记录</button>
+                    <button id="newSessionBtn" class="secondary-btn" type="button">新会话</button>
                     <button id="sendBtn" class="send-btn" type="button">发送消息</button>
                 </div>
             </div>
@@ -421,37 +410,33 @@
 
 <script>
     const tokenInput = document.getElementById('tokenInput');
+    const conversationInput = document.getElementById('conversationInput');
+    const conversationPreview = document.getElementById('conversationPreview');
     const messageInput = document.getElementById('messageInput');
     const messages = document.getElementById('messages');
     const sendBtn = document.getElementById('sendBtn');
-    const clearBtn = document.getElementById('clearBtn');
+    const newSessionBtn = document.getElementById('newSessionBtn');
     const statusText = document.getElementById('statusText');
     const streamToggle = document.getElementById('streamToggle');
 
     const TOKEN_KEY = 'lease-assistant-token';
     const STREAM_KEY = 'lease-assistant-stream-enabled';
+    const CONVERSATION_KEY = 'lease-assistant-conversation-id';
 
     tokenInput.value = localStorage.getItem(TOKEN_KEY) || '';
     streamToggle.checked = localStorage.getItem(STREAM_KEY) !== 'false';
+    conversationInput.value = localStorage.getItem(CONVERSATION_KEY) || createConversationId();
+    syncConversationId(conversationInput.value, false);
 
-    tokenInput.addEventListener('input', () => {
-        localStorage.setItem(TOKEN_KEY, tokenInput.value.trim());
-    });
-
-    streamToggle.addEventListener('change', () => {
-        localStorage.setItem(STREAM_KEY, String(streamToggle.checked));
-    });
+    tokenInput.addEventListener('input', () => localStorage.setItem(TOKEN_KEY, tokenInput.value.trim()));
+    streamToggle.addEventListener('change', () => localStorage.setItem(STREAM_KEY, String(streamToggle.checked)));
+    conversationInput.addEventListener('input', () => syncConversationId(conversationInput.value.trim() || createConversationId(), true));
 
     document.querySelectorAll('.suggestion-chip').forEach((button) => {
         button.addEventListener('click', () => {
             messageInput.value = button.dataset.text || '';
             messageInput.focus();
         });
-    });
-
-    clearBtn.addEventListener('click', () => {
-        messages.innerHTML = '<div class="message system">会话已清空，可以继续测试新的问题。</div>';
-        statusText.textContent = '等待发送';
     });
 
     messageInput.addEventListener('keydown', (event) => {
@@ -461,6 +446,29 @@
     });
 
     sendBtn.addEventListener('click', sendMessage);
+    newSessionBtn.addEventListener('click', startNewSession);
+
+    function createConversationId() {
+        return `lease-chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+
+    function syncConversationId(value, updateInput = true) {
+        const nextId = value || createConversationId();
+        localStorage.setItem(CONVERSATION_KEY, nextId);
+        if (updateInput) {
+            conversationInput.value = nextId;
+        }
+        conversationPreview.textContent = `当前会话：${nextId}`;
+        return nextId;
+    }
+
+    function startNewSession() {
+        const nextId = createConversationId();
+        syncConversationId(nextId);
+        messages.innerHTML = '<div class="message system">已开启新会话，可以继续测试新的问题。</div>';
+        statusText.textContent = '已切换到新会话';
+        messageInput.focus();
+    }
 
     function appendMessage(role, text = '') {
         const node = document.createElement('div');
@@ -477,6 +485,9 @@
     }
 
     function renderAssistantReply(node, data) {
+        if (data && data.conversationId) {
+            syncConversationId(data.conversationId);
+        }
         const paragraphs = data && Array.isArray(data.paragraphs) && data.paragraphs.length > 0
             ? data.paragraphs
             : [data && data.reply ? data.reply : '助手没有返回内容'];
@@ -491,6 +502,8 @@
         }
 
         const token = tokenInput.value.trim();
+        const conversationId = syncConversationId(conversationInput.value.trim() || createConversationId());
+
         appendMessage('user', message);
         const assistantNode = appendMessage('assistant', '');
         messageInput.value = '';
@@ -499,12 +512,12 @@
 
         try {
             if (streamToggle.checked) {
-                await sendStreamingMessage(message, token, assistantNode);
+                await sendStreamingMessage(message, token, conversationId, assistantNode);
             } else {
-                await sendStandardMessage(message, token, assistantNode);
+                await sendStandardMessage(message, token, conversationId, assistantNode);
             }
         } catch (error) {
-            updateMessage(assistantNode, '请求失败，请检查服务是否启动，以及 token 是否有效。');
+            updateMessage(assistantNode, '请求失败，请检查服务是否已启动，以及 token 是否有效。');
             statusText.textContent = '网络异常';
         } finally {
             sendBtn.disabled = false;
@@ -512,7 +525,7 @@
         }
     }
 
-    async function sendStandardMessage(message, token, assistantNode) {
+    async function sendStandardMessage(message, token, conversationId, assistantNode) {
         const headers = {'Content-Type': 'application/json'};
         if (token) {
             headers['access-token'] = token;
@@ -521,7 +534,7 @@
         const response = await fetch('/app/assistant/chat', {
             method: 'POST',
             headers,
-            body: JSON.stringify({message})
+            body: JSON.stringify({message, conversationId})
         });
 
         const result = await response.json();
@@ -535,7 +548,7 @@
         statusText.textContent = '回复完成';
     }
 
-    async function sendStreamingMessage(message, token, assistantNode) {
+    async function sendStreamingMessage(message, token, conversationId, assistantNode) {
         const headers = {'Content-Type': 'application/json'};
         if (token) {
             headers['access-token'] = token;
@@ -544,7 +557,7 @@
         const response = await fetch('/app/assistant/chat/stream', {
             method: 'POST',
             headers,
-            body: JSON.stringify({message})
+            body: JSON.stringify({message, conversationId})
         });
 
         if (!response.ok || !response.body) {
@@ -602,6 +615,10 @@
             payload = JSON.parse(rawData);
         } catch (error) {
             payload = {message: rawData};
+        }
+
+        if (payload && payload.conversationId) {
+            syncConversationId(payload.conversationId);
         }
 
         switch (eventName) {

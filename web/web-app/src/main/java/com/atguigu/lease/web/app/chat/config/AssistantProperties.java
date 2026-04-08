@@ -24,4 +24,18 @@ public class AssistantProperties {
     private Duration timeout = Duration.ofSeconds(60);
 
     private Integer maxSearchResults = 5;
+
+    private boolean memoryEnabled = true;
+
+    private boolean mongoMemoryEnabled = true;
+
+    private Integer maxMemoryMessages = 20;
+
+    private boolean ragEnabled = true;
+
+    private String knowledgeLocation = "classpath*:assistant-knowledge/*.md";
+
+    private Integer maxKnowledgeMatches = 2;
+
+    private Integer maxKnowledgeChars = 1200;
 }

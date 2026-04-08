@@ -21,6 +21,8 @@ spring:
       host: localhost
       port: 6379
       database: 0
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/lease_assistant}
 
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
@@ -87,3 +89,10 @@ app:
       temperature: ${APP_AI_ASSISTANT_TEMPERATURE:0.2}
       timeout: ${APP_AI_ASSISTANT_TIMEOUT:60s}
       max-search-results: ${APP_AI_ASSISTANT_MAX_SEARCH_RESULTS:5}
+      memory-enabled: ${APP_AI_ASSISTANT_MEMORY_ENABLED:true}
+      mongo-memory-enabled: ${APP_AI_ASSISTANT_MONGO_MEMORY_ENABLED:true}
+      max-memory-messages: ${APP_AI_ASSISTANT_MAX_MEMORY_MESSAGES:20}
+      rag-enabled: ${APP_AI_ASSISTANT_RAG_ENABLED:true}
+      knowledge-location: ${APP_AI_ASSISTANT_KNOWLEDGE_LOCATION:classpath*:assistant-knowledge/*.md}
+      max-knowledge-matches: ${APP_AI_ASSISTANT_MAX_KNOWLEDGE_MATCHES:2}
+      max-knowledge-chars: ${APP_AI_ASSISTANT_MAX_KNOWLEDGE_CHARS:1200}

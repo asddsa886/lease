@@ -1,18 +1,27 @@
 package com.atguigu.lease.web.app.chat.config;
 
+import com.atguigu.lease.web.app.chat.memory.AssistantMongoChatMemoryStore;
+import com.atguigu.lease.web.app.chat.rag.LocalKnowledgeContentRetriever;
 import com.atguigu.lease.web.app.chat.service.RentalAssistant;
 import com.atguigu.lease.web.app.chat.service.StreamingRentalAssistant;
 import com.atguigu.lease.web.app.chat.tool.RentalAssistantTools;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.langchain4j.memory.chat.ChatMemoryProvider;
+import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
+import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.service.AiServices;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.support.ResourcePatternResolver;
+import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.util.StringUtils;
 
 import java.util.Locale;
@@ -48,22 +57,72 @@ public class AssistantConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(ChatModel.class)
-    public RentalAssistant rentalAssistant(ChatModel assistantChatModel, RentalAssistantTools rentalAssistantTools) {
-        return AiServices.builder(RentalAssistant.class)
-                .chatModel(assistantChatModel)
-                .tools(rentalAssistantTools)
+    @ConditionalOnProperty(prefix = "app.ai.assistant", name = "enabled", havingValue = "true")
+    public AssistantMongoChatMemoryStore assistantChatMemoryStore(AssistantProperties assistantProperties,
+                                                                  ObjectProvider<MongoTemplate> mongoTemplateProvider,
+                                                                  ObjectMapper objectMapper) {
+        return new AssistantMongoChatMemoryStore(assistantProperties, mongoTemplateProvider, objectMapper);
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "app.ai.assistant", name = "enabled", havingValue = "true")
+    public ChatMemoryProvider assistantChatMemoryProvider(AssistantProperties assistantProperties,
+                                                          AssistantMongoChatMemoryStore assistantChatMemoryStore) {
+        int maxMessages = assistantProperties.getMaxMemoryMessages() == null
+                ? 20
+                : assistantProperties.getMaxMemoryMessages();
+        return memoryId -> MessageWindowChatMemory.builder()
+                .id(memoryId)
+                .maxMessages(Math.max(maxMessages, 4))
+                .chatMemoryStore(assistantChatMemoryStore)
                 .build();
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "app.ai.assistant", name = "enabled", havingValue = "true")
+    public ContentRetriever assistantContentRetriever(AssistantProperties assistantProperties,
+                                                      ResourcePatternResolver resourcePatternResolver) {
+        return new LocalKnowledgeContentRetriever(assistantProperties, resourcePatternResolver);
+    }
+
+    @Bean
+    @ConditionalOnBean(ChatModel.class)
+    public RentalAssistant rentalAssistant(ChatModel assistantChatModel,
+                                           RentalAssistantTools rentalAssistantTools,
+                                           ChatMemoryProvider assistantChatMemoryProvider,
+                                           ContentRetriever assistantContentRetriever,
+                                           AssistantProperties assistantProperties) {
+        AiServices<RentalAssistant> builder = AiServices.builder(RentalAssistant.class)
+                .chatModel(assistantChatModel)
+                .tools(rentalAssistantTools);
+
+        if (assistantProperties.isMemoryEnabled()) {
+            builder = builder.chatMemoryProvider(assistantChatMemoryProvider);
+        }
+        if (assistantProperties.isRagEnabled()) {
+            builder = builder.contentRetriever(assistantContentRetriever);
+        }
+        return builder.build();
     }
 
     @Bean
     @ConditionalOnBean(StreamingChatModel.class)
     public StreamingRentalAssistant streamingRentalAssistant(StreamingChatModel assistantStreamingChatModel,
-                                                             RentalAssistantTools rentalAssistantTools) {
-        return AiServices.builder(StreamingRentalAssistant.class)
+                                                             RentalAssistantTools rentalAssistantTools,
+                                                             ChatMemoryProvider assistantChatMemoryProvider,
+                                                             ContentRetriever assistantContentRetriever,
+                                                             AssistantProperties assistantProperties) {
+        AiServices<StreamingRentalAssistant> builder = AiServices.builder(StreamingRentalAssistant.class)
                 .streamingChatModel(assistantStreamingChatModel)
-                .tools(rentalAssistantTools)
-                .build();
+                .tools(rentalAssistantTools);
+
+        if (assistantProperties.isMemoryEnabled()) {
+            builder = builder.chatMemoryProvider(assistantChatMemoryProvider);
+        }
+        if (assistantProperties.isRagEnabled()) {
+            builder = builder.contentRetriever(assistantContentRetriever);
+        }
+        return builder.build();
     }
 
     private void validateOpenAiCompatibleConfig(AssistantProperties assistantProperties) {

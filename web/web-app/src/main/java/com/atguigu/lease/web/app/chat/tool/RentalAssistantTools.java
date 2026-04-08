@@ -172,7 +172,10 @@ public class RentalAssistantTools {
         return toJson(payload);
     }
 
-    private Map<String, Object> buildSearchFilters(RegionMatch regionMatch, String regionKeyword, BigDecimal minRent, BigDecimal maxRent) {
+    private Map<String, Object> buildSearchFilters(RegionMatch regionMatch,
+                                                   String regionKeyword,
+                                                   BigDecimal minRent,
+                                                   BigDecimal maxRent) {
         LinkedHashMap<String, Object> filters = new LinkedHashMap<>();
         if (regionMatch != null) {
             filters.put("regionKeyword", regionMatch.name());
@@ -506,7 +509,7 @@ public class RentalAssistantTools {
 
     private RoomKeywordParts parseRoomKeyword(String roomKeyword) {
         String normalized = roomKeyword.trim()
-                .replace("这个介绍一下", "")
+                .replace("这个介绍介绍", "")
                 .replace("介绍介绍", "")
                 .replace("介绍一下", "")
                 .replace("介绍", "")
