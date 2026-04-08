@@ -10,10 +10,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.util.StringUtils;
 
 @Configuration
 @EnableConfigurationProperties(AliyunSMSProperties.class)
-@ConditionalOnProperty(name = "aliyun.sms.endpoint")
 @Slf4j
 public class AliyunSMSConfiguration {
 
@@ -21,7 +21,12 @@ public class AliyunSMSConfiguration {
     private AliyunSMSProperties aliyunSMSProperties;
 
     @Bean
+    @ConditionalOnProperty(name = "aliyun.sms.mock-enabled", havingValue = "false")
     public Client createClient() {
+        if (!StringUtils.hasText(aliyunSMSProperties.getEndpoint())) {
+            throw new LeaseException(ResultCodeEnum.APP_SMS_CLIENT_INIT_ERROR);
+        }
+
         Config config = new Config();
         config.setAccessKeyId(aliyunSMSProperties.getAccessKeyId());
         config.setAccessKeySecret(aliyunSMSProperties.getAccessKeySecret());

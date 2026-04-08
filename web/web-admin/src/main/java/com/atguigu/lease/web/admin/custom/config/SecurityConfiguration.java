@@ -56,7 +56,9 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/admin/login/**",
+                                "/doc.html",
                                 "/v3/api-docs/**",
+                                "/swagger-resources/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/webjars/**",

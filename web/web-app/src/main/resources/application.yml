@@ -43,6 +43,7 @@ aliyun:
     access-key-id: ${ALIYUN_SMS_ACCESS_KEY_ID:}
     access-key-secret: ${ALIYUN_SMS_ACCESS_KEY_SECRET:}
     endpoint: ${ALIYUN_SMS_ENDPOINT:}
+    mock-enabled: ${ALIYUN_SMS_MOCK_ENABLED:true}
 
 # JWT 配置（建议生产环境通过环境变量注入，并定期轮转）
 jwt:
@@ -74,3 +75,15 @@ rate-limit:
       ip:
         limit: ${RL_APP_APPOINTMENT_IP_LIMIT:60}
         window: ${RL_APP_APPOINTMENT_IP_WINDOW:60s}
+
+app:
+  ai:
+    assistant:
+      enabled: ${APP_AI_ASSISTANT_ENABLED:true}
+      provider: ${APP_AI_ASSISTANT_PROVIDER:openai-compatible}
+      base-url: ${APP_AI_ASSISTANT_BASE_URL:https://eo.ai.hybgzs.com/v1}
+      model-name: ${APP_AI_ASSISTANT_MODEL:gpt-4.1-mini}
+      api-key: ${APP_AI_ASSISTANT_API_KEY:sk-bTxqZY8GnhFm8ZG_9vWkv0aQ8mRkb3yl1junDKbKPwcnlxEk1aUAyUHN0pM}
+      temperature: ${APP_AI_ASSISTANT_TEMPERATURE:0.2}
+      timeout: ${APP_AI_ASSISTANT_TIMEOUT:60s}
+      max-search-results: ${APP_AI_ASSISTANT_MAX_SEARCH_RESULTS:5}

@@ -9,4 +9,5 @@ public class AliyunSMSProperties {
     private String accessKeyId;
     private String accessKeySecret;
     private String endpoint;
+    private boolean mockEnabled;
 }

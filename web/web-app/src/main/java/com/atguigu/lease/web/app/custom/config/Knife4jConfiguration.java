@@ -9,13 +9,14 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class Knife4jConfiguration {
+
     @Bean
     public OpenAPI customOpenAPI() {
-        return new OpenAPI().
-                info(new Info()
+        return new OpenAPI()
+                .info(new Info()
                         .title("App接口")
                         .version("1.0")
-                        .description("用户app接口")
+                        .description("用户 App 接口文档")
                         .termsOfService("http://doc.xiaominfo.com")
                         .license(new License()
                                 .name("Apache 2.0")
@@ -24,12 +25,12 @@ public class Knife4jConfiguration {
 
     @Bean
     public GroupedOpenApi loginAPI() {
-        return GroupedOpenApi.builder().group("登录信息").pathsToMatch("/app/login/**", "/app/info").build();
+        return GroupedOpenApi.builder()
+                .group("登录信息")
+                .pathsToMatch("/app/login/**", "/app/info")
+                .build();
     }
 
-    /**
-     * 个人信息相关API分组：个人信息
-     */
     @Bean
     public GroupedOpenApi personAPI() {
         return GroupedOpenApi.builder()
@@ -42,9 +43,6 @@ public class Knife4jConfiguration {
                 .build();
     }
 
-    /**
-     * 找房信息相关API分组：找房信息
-     */
     @Bean
     public GroupedOpenApi lookForRoomAPI() {
         return GroupedOpenApi.builder()
@@ -56,6 +54,14 @@ public class Knife4jConfiguration {
                         "/app/region/**",
                         "/app/term/**"
                 )
+                .build();
+    }
+
+    @Bean
+    public GroupedOpenApi assistantAPI() {
+        return GroupedOpenApi.builder()
+                .group("智能助手")
+                .pathsToMatch("/app/assistant/**")
                 .build();
     }
 }

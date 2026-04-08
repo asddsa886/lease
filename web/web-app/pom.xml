@@ -37,6 +37,18 @@
 
         </dependency>
 
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j</artifactId>
+            <version>1.10.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-open-ai</artifactId>
+            <version>1.10.0</version>
+        </dependency>
+
 <!--        &lt;!&ndash; https://mvnrepository.com/artifact/com.aliyun/dysmsapi20170525 &ndash;&gt;-->
 <!--        <dependency>-->
 <!--            <groupId>com.aliyun</groupId>-->

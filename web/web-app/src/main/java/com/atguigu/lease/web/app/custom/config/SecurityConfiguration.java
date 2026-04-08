@@ -56,7 +56,10 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(auth -> auth       // 配置接口访问权限
                         .requestMatchers(
                                 "/app/login/**",
+                                "/assistant.html",
+                                "/doc.html",
                                 "/v3/api-docs/**",
+                                "/swagger-resources/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/webjars/**",

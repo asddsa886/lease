@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>租房智能助手</title>
+    <style>
+        :root {
+            --bg: #f5f1e8;
+            --panel: rgba(255, 252, 245, 0.92);
+            --line: rgba(76, 57, 39, 0.14);
+            --text: #2f2419;
+            --muted: #7f6a57;
+            --accent: #17624b;
+            --accent-strong: #0d4d39;
+            --assistant: #fffaf2;
+            --user: #17624b;
+            --user-text: #fefcf6;
+            --shadow: 0 18px 45px rgba(83, 60, 33, 0.12);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+            color: var(--text);
+            background:
+                    radial-gradient(circle at top left, rgba(23, 98, 75, 0.18), transparent 28%),
+                    radial-gradient(circle at right, rgba(189, 144, 87, 0.22), transparent 25%),
+                    linear-gradient(135deg, #f5f1e8 0%, #f3eadf 42%, #efe3d6 100%);
+            padding: 32px 18px;
+        }
+
+        .shell {
+            max-width: 1080px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 320px minmax(0, 1fr);
+            gap: 24px;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 24px;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(10px);
+        }
+
+        .sidebar {
+            padding: 28px 24px;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(23, 98, 75, 0.08);
+            color: var(--accent-strong);
+            font-size: 12px;
+            letter-spacing: 0.08em;
+        }
+
+        h1 {
+            margin: 18px 0 10px;
+            font-size: 34px;
+            line-height: 1.15;
+        }
+
+        .intro {
+            margin: 0 0 22px;
+            color: var(--muted);
+            line-height: 1.7;
+            font-size: 14px;
+        }
+
+        .sidebar h2 {
+            margin: 24px 0 10px;
+            font-size: 16px;
+        }
+
+        .bullet-list {
+            margin: 0;
+            padding-left: 18px;
+            color: var(--muted);
+            line-height: 1.8;
+            font-size: 14px;
+        }
+
+        .token-box {
+            margin-top: 18px;
+            padding: 16px;
+            border: 1px dashed rgba(23, 98, 75, 0.28);
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.55);
+        }
+
+        .token-box label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        .token-box input {
+            width: 100%;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 12px 14px;
+            font-size: 14px;
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.95);
+        }
+
+        .token-tip {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .chat {
+            display: flex;
+            flex-direction: column;
+            min-height: 760px;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            padding: 24px 26px 18px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .chat-title {
+            margin: 0;
+            font-size: 22px;
+        }
+
+        .chat-subtitle {
+            margin: 8px 0 0;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .suggestions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        .suggestion-chip {
+            border: 1px solid rgba(23, 98, 75, 0.18);
+            background: rgba(23, 98, 75, 0.05);
+            color: var(--accent-strong);
+            border-radius: 999px;
+            padding: 9px 14px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .messages {
+            flex: 1;
+            padding: 24px 26px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .message {
+            max-width: 82%;
+            border-radius: 22px;
+            padding: 15px 18px;
+            line-height: 1.75;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-size: 15px;
+            box-shadow: 0 10px 22px rgba(72, 50, 28, 0.08);
+        }
+
+        .message.assistant {
+            background: var(--assistant);
+            border: 1px solid rgba(76, 57, 39, 0.08);
+            align-self: flex-start;
+        }
+
+        .message.user {
+            background: var(--user);
+            color: var(--user-text);
+            align-self: flex-end;
+        }
+
+        .message.system {
+            align-self: center;
+            background: rgba(23, 98, 75, 0.08);
+            color: var(--accent-strong);
+            border: 1px dashed rgba(23, 98, 75, 0.24);
+            box-shadow: none;
+        }
+
+        .composer {
+            border-top: 1px solid var(--line);
+            padding: 18px 22px 22px;
+            background: rgba(255, 252, 245, 0.98);
+        }
+
+        .composer textarea {
+            width: 100%;
+            min-height: 118px;
+            resize: vertical;
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            padding: 16px 18px;
+            font-size: 15px;
+            line-height: 1.7;
+            color: var(--text);
+            background: #fffdf9;
+        }
+
+        .composer-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-top: 14px;
+        }
+
+        .status {
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            border: none;
+            border-radius: 14px;
+            padding: 12px 18px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .send-btn {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        .send-btn:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+        }
+
+        .clear-btn {
+            background: rgba(76, 57, 39, 0.08);
+            color: var(--text);
+        }
+
+        @media (max-width: 960px) {
+            .shell {
+                grid-template-columns: 1fr;
+            }
+
+            .chat {
+                min-height: 72vh;
+            }
+
+            .message {
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="shell">
+    <aside class="panel sidebar">
+        <span class="eyebrow">LEASE ASSISTANT</span>
+        <h1>租房智能助手</h1>
+        <p class="intro">
+            这是一个最小可用聊天页，适合替代 `doc.html` 做联调。页面会保留换行显示，工具查询结果也会比原始 JSON 更自然。
+        </p>
+
+        <h2>当前支持</h2>
+        <ul class="bullet-list">
+            <li>查询房源列表</li>
+            <li>查看房间详情</li>
+            <li>查看我的预约</li>
+            <li>查看我的租约</li>
+            <li>简单闲聊与常识问答</li>
+        </ul>
+
+        <div class="token-box">
+            <label for="tokenInput">Access Token</label>
+            <input id="tokenInput" type="text" placeholder="粘贴 access-token，可保存在浏览器本地">
+            <div class="token-tip">
+                如果要查“我的预约/我的租约”，需要先登录并填入 token。页面会自动保存到浏览器本地。
+            </div>
+        </div>
+    </aside>
+
+    <section class="panel chat">
+        <div class="chat-header">
+            <h2 class="chat-title">对话测试</h2>
+            <p class="chat-subtitle">建议先试示例问题，再观察回复排版和工具调用结果。</p>
+            <div class="suggestions">
+                <button class="suggestion-chip" type="button" data-text="你可以帮我做什么？">你可以帮我做什么？</button>
+                <button class="suggestion-chip" type="button" data-text="帮我查一下朝阳区 3000 以内的房源">房源查询</button>
+                <button class="suggestion-chip" type="button" data-text="帮我看看我有哪些预约">我的预约</button>
+                <button class="suggestion-chip" type="button" data-text="帮我看看我有哪些租约">我的租约</button>
+            </div>
+        </div>
+
+        <div id="messages" class="messages">
+            <div class="message system">你好，我已经准备好了。你可以先问我“你可以帮我做什么？”。</div>
+        </div>
+
+        <div class="composer">
+            <textarea id="messageInput" placeholder="输入问题，例如：帮我查一下朝阳区 3000 以内的房源"></textarea>
+            <div class="composer-footer">
+                <div id="statusText" class="status">等待发送</div>
+                <div class="actions">
+                    <button id="clearBtn" class="clear-btn" type="button">清空记录</button>
+                    <button id="sendBtn" class="send-btn" type="button">发送消息</button>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<script>
+    const tokenInput = document.getElementById('tokenInput');
+    const messageInput = document.getElementById('messageInput');
+    const messages = document.getElementById('messages');
+    const sendBtn = document.getElementById('sendBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const statusText = document.getElementById('statusText');
+
+    const TOKEN_KEY = 'lease-assistant-token';
+
+    tokenInput.value = localStorage.getItem(TOKEN_KEY) || '';
+
+    tokenInput.addEventListener('input', () => {
+        localStorage.setItem(TOKEN_KEY, tokenInput.value.trim());
+    });
+
+    document.querySelectorAll('.suggestion-chip').forEach((button) => {
+        button.addEventListener('click', () => {
+            messageInput.value = button.dataset.text || '';
+            messageInput.focus();
+        });
+    });
+
+    clearBtn.addEventListener('click', () => {
+        messages.innerHTML = '<div class="message system">会话已清空，可以继续测试新的问题。</div>';
+        statusText.textContent = '等待发送';
+    });
+
+    messageInput.addEventListener('keydown', (event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+            sendMessage();
+        }
+    });
+
+    sendBtn.addEventListener('click', sendMessage);
+
+    function appendMessage(role, text) {
+        const node = document.createElement('div');
+        node.className = `message ${role}`;
+        node.textContent = text;
+        messages.appendChild(node);
+        messages.scrollTop = messages.scrollHeight;
+    }
+
+    function appendAssistantReply(data) {
+        const paragraphs = data && Array.isArray(data.paragraphs) && data.paragraphs.length > 0
+            ? data.paragraphs
+            : [data && data.reply ? data.reply : '助手没有返回内容'];
+        appendMessage('assistant', paragraphs.join('\n\n'));
+    }
+
+    async function sendMessage() {
+        const message = messageInput.value.trim();
+        if (!message) {
+            statusText.textContent = '请输入问题';
+            return;
+        }
+
+        const token = tokenInput.value.trim();
+        appendMessage('user', message);
+        messageInput.value = '';
+        statusText.textContent = '正在等待助手回复...';
+        sendBtn.disabled = true;
+
+        try {
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+            if (token) {
+                headers['access-token'] = token;
+            }
+
+            const response = await fetch('/app/assistant/chat', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({message})
+            });
+
+            const result = await response.json();
+            if (!response.ok || !result || result.code !== 200) {
+                const errorMessage = result && result.message ? result.message : '请求失败，请稍后重试';
+                appendMessage('assistant', errorMessage);
+                statusText.textContent = '请求失败';
+                return;
+            }
+
+            appendAssistantReply(result.data);
+            statusText.textContent = '回复完成';
+        } catch (error) {
+            appendMessage('assistant', '请求失败，请检查服务是否启动，以及 token 是否有效。');
+            statusText.textContent = '网络异常';
+        } finally {
+            sendBtn.disabled = false;
+            messageInput.focus();
+        }
+    }
+</script>
+</body>
+</html>
