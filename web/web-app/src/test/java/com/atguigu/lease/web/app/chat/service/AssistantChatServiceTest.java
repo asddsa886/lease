@@ -2,10 +2,13 @@ package com.atguigu.lease.web.app.chat.service;
 
 import com.atguigu.lease.common.exception.LeaseException;
 import com.atguigu.lease.common.result.ResultCodeEnum;
+import com.atguigu.lease.web.app.chat.agent.AssistantTaskStateStore;
 import com.atguigu.lease.web.app.chat.config.AssistantProperties;
 import com.atguigu.lease.web.app.chat.dto.AssistantChatResponseVo;
 import com.atguigu.lease.web.app.chat.memory.AssistantMongoChatMemoryStore;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.service.Result;
+import dev.langchain4j.service.tool.ToolExecution;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,6 +21,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Answers.RETURNS_DEEP_STUBS;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -41,7 +46,9 @@ class AssistantChatServiceTest {
                 assistantProperties,
                 rentalAssistantProvider,
                 streamingRentalAssistantProvider,
-                assistantChatMemoryStoreProvider
+                assistantChatMemoryStoreProvider,
+                new AssistantTaskStateStore(),
+                new ObjectMapper()
         );
     }
 
@@ -62,6 +69,7 @@ class AssistantChatServiceTest {
         assertEquals("unknown", response.getFinishReason());
         assertEquals(List.of(), response.getToolExecutions());
         assertEquals(List.of(), response.getKnowledgeSources());
+        assertEquals(List.of(), response.getNextActions());
     }
 
     @Test
@@ -90,6 +98,30 @@ class AssistantChatServiceTest {
         LeaseException exception = assertThrows(LeaseException.class, () -> assistantChatService.chat("你好"));
 
         assertEquals(ResultCodeEnum.SERVICE_ERROR.getCode(), exception.getCode());
+    }
+
+    @Test
+    void chat_shouldBuildTaskStateAndNextActionsForRoomSearch() {
+        ToolExecution toolExecution = mock(ToolExecution.class, RETURNS_DEEP_STUBS);
+        when(toolExecution.request().name()).thenReturn("searchRooms");
+        when(toolExecution.request().arguments()).thenReturn("{\"districtName\":\"Beijing\",\"maxRent\":3000}");
+        when(toolExecution.result()).thenReturn("""
+                {"tool":"searchRooms","summary":"2 rooms found.","items":[
+                  {"roomId":2,"title":"Wendu Room 101"},
+                  {"roomId":3,"title":"Huilongguan Room 102"}
+                ]}
+                """);
+        when(toolExecution.hasFailed()).thenReturn(false);
+        when(rentalAssistantProvider.getIfAvailable()).thenReturn((conversationId, message) ->
+                new Result<String>("Two rooms found.", null, List.of(), null, List.of(toolExecution)));
+
+        AssistantChatResponseVo response = assistantChatService.chat("Find rooms in Beijing within 3000", "room-chat-001");
+
+        assertEquals("ROOM_SEARCH", response.getTaskState().getTaskType());
+        assertEquals("WAITING_USER_INPUT", response.getTaskState().getTaskStatus());
+        assertEquals(2, response.getTaskState().getCandidateRooms().size());
+        assertEquals(3, response.getNextActions().size());
+        assertEquals("VIEW_ROOM_DETAIL", response.getNextActions().get(0).getAction());
     }
 
     private Result<String> result(String content) {

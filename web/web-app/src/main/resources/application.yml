@@ -83,11 +83,14 @@ app:
     assistant:
       enabled: ${APP_AI_ASSISTANT_ENABLED:true}
       provider: ${APP_AI_ASSISTANT_PROVIDER:openai-compatible}
-      base-url: ${APP_AI_ASSISTANT_BASE_URL:https://eo.ai.hybgzs.com/v1}
-      model-name: ${APP_AI_ASSISTANT_MODEL:z-ai/glm5}
-      api-key: ${APP_AI_ASSISTANT_API_KEY:sk-bTxqZY8GnhFm8ZG_9vWkv0aQ8mRkb3yl1junDKbKPwcnlxEk1aUAyUHN0pM}
+      base-url: ${APP_AI_ASSISTANT_BASE_URL:https://elysia.h-e.top/v1}
+      model-name: ${APP_AI_ASSISTANT_MODEL:gpt-5-nano}
+      api-key: ${APP_AI_ASSISTANT_API_KEY:sk-sg6Hw8s92ZiIhSDVybMrSWgy3rSOTgxxROH2BwmCdmWRQV0L}
       temperature: ${APP_AI_ASSISTANT_TEMPERATURE:0.2}
       timeout: ${APP_AI_ASSISTANT_TIMEOUT:60s}
+      max-retries: ${APP_AI_ASSISTANT_MAX_RETRIES:0}
+      log-requests: ${APP_AI_ASSISTANT_LOG_REQUESTS:false}
+      log-responses: ${APP_AI_ASSISTANT_LOG_RESPONSES:false}
       max-search-results: ${APP_AI_ASSISTANT_MAX_SEARCH_RESULTS:5}
       memory-enabled: ${APP_AI_ASSISTANT_MEMORY_ENABLED:true}
       mongo-memory-enabled: ${APP_AI_ASSISTANT_MONGO_MEMORY_ENABLED:true}

@@ -23,6 +23,12 @@ public class AssistantProperties {
 
     private Duration timeout = Duration.ofSeconds(60);
 
+    private Integer maxRetries = 2;
+
+    private boolean logRequests = false;
+
+    private boolean logResponses = false;
+
     private Integer maxSearchResults = 5;
 
     private boolean memoryEnabled = true;

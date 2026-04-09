@@ -11,6 +11,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 
 import java.util.Comparator;
 import java.util.stream.Collectors;
@@ -72,6 +73,11 @@ public class GlobalExceptionHandler {
         // 业务异常：通常可控，打印 warn 级别，保留堆栈用于排查（如需可降级为 debug）
         log.warn("Business exception: code={}, message={}", e.getCode(), e.getMessage(), e);
         return Result.fail(e.getCode(), e.getMessage());
+    }
+
+    @ExceptionHandler(AsyncRequestTimeoutException.class)
+    public void handle(AsyncRequestTimeoutException e) {
+        log.warn("Async request timeout", e);
     }
 
     @ExceptionHandler(Exception.class)

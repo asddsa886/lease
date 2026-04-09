@@ -260,6 +260,41 @@
             box-shadow: none;
         }
 
+        .message-meta {
+            align-self: flex-start;
+            max-width: 82%;
+            margin-top: -8px;
+            padding: 0 6px 0 10px;
+        }
+
+        .task-badge {
+            display: inline-flex;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 8px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(23, 98, 75, 0.08);
+            color: var(--accent-strong);
+            font-size: 12px;
+        }
+
+        .next-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .next-action-btn {
+            border: 1px solid rgba(23, 98, 75, 0.18);
+            background: rgba(255, 255, 255, 0.78);
+            color: var(--accent-strong);
+            border-radius: 999px;
+            padding: 8px 12px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
         .composer {
             border-top: 1px solid var(--line);
             padding: 18px 22px 22px;
@@ -484,6 +519,52 @@
         messages.scrollTop = messages.scrollHeight;
     }
 
+    function removeMessageMeta(node) {
+        const next = node.nextElementSibling;
+        if (next && next.classList.contains('message-meta')) {
+            next.remove();
+        }
+    }
+
+    function renderMessageMeta(node, data) {
+        removeMessageMeta(node);
+        const taskState = data && data.taskState ? data.taskState : null;
+        const nextActions = data && Array.isArray(data.nextActions) ? data.nextActions : [];
+        if (!taskState && nextActions.length === 0) {
+            return;
+        }
+
+        const meta = document.createElement('div');
+        meta.className = 'message-meta';
+
+        if (taskState && taskState.taskType) {
+            const badge = document.createElement('div');
+            badge.className = 'task-badge';
+            badge.textContent = `任务: ${taskState.taskType} / ${taskState.taskStatus || 'UNKNOWN'}`;
+            meta.appendChild(badge);
+        }
+
+        if (nextActions.length > 0) {
+            const actions = document.createElement('div');
+            actions.className = 'next-actions';
+            nextActions.forEach((action) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'next-action-btn';
+                button.textContent = action.label || action.prompt || '下一步';
+                button.addEventListener('click', () => {
+                    messageInput.value = action.prompt || '';
+                    messageInput.focus();
+                });
+                actions.appendChild(button);
+            });
+            meta.appendChild(actions);
+        }
+
+        node.after(meta);
+        messages.scrollTop = messages.scrollHeight;
+    }
+
     function renderAssistantReply(node, data) {
         if (data && data.conversationId) {
             syncConversationId(data.conversationId);
@@ -492,6 +573,7 @@
             ? data.paragraphs
             : [data && data.reply ? data.reply : '助手没有返回内容'];
         updateMessage(node, paragraphs.join('\n\n'));
+        renderMessageMeta(node, data);
     }
 
     async function sendMessage() {

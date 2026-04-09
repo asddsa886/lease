@@ -2,11 +2,18 @@ package com.atguigu.lease.web.app.chat.service;
 
 import com.atguigu.lease.common.exception.LeaseException;
 import com.atguigu.lease.common.result.ResultCodeEnum;
+import com.atguigu.lease.web.app.chat.agent.AssistantTaskState;
+import com.atguigu.lease.web.app.chat.agent.AssistantTaskStateStore;
 import com.atguigu.lease.web.app.chat.config.AssistantProperties;
 import com.atguigu.lease.web.app.chat.dto.AssistantChatResponseVo;
 import com.atguigu.lease.web.app.chat.dto.AssistantKnowledgeSourceVo;
+import com.atguigu.lease.web.app.chat.dto.AssistantNextActionVo;
+import com.atguigu.lease.web.app.chat.dto.AssistantRoomCandidateVo;
+import com.atguigu.lease.web.app.chat.dto.AssistantTaskStateVo;
 import com.atguigu.lease.web.app.chat.dto.AssistantToolExecutionVo;
 import com.atguigu.lease.web.app.chat.memory.AssistantMongoChatMemoryStore;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.rag.content.Content;
@@ -51,6 +58,8 @@ public class AssistantChatService {
     private final ObjectProvider<RentalAssistant> rentalAssistantProvider;
     private final ObjectProvider<StreamingRentalAssistant> streamingRentalAssistantProvider;
     private final ObjectProvider<AssistantMongoChatMemoryStore> assistantChatMemoryStoreProvider;
+    private final AssistantTaskStateStore assistantTaskStateStore;
+    private final ObjectMapper objectMapper;
 
     public AssistantChatResponseVo chat(String message) {
         return chat(message, null);
@@ -257,6 +266,8 @@ public class AssistantChatService {
                         ? "unknown"
                         : chatResponse.finishReason().name().toLowerCase(Locale.ROOT),
                 List.copyOf(toolExecutions),
+                List.of(),
+                null,
                 List.of()
         );
         sendEvent(emitter, "complete", buildCompletePayload(response));
@@ -284,6 +295,8 @@ public class AssistantChatService {
         List<String> paragraphs = splitParagraphs(formattedReply);
         List<AssistantToolExecutionVo> toolExecutions = buildToolExecutions(assistantResult);
         List<AssistantKnowledgeSourceVo> knowledgeSources = buildKnowledgeSources(assistantResult);
+        AssistantTaskState taskState = resolveTaskState(conversationId, assistantResult);
+        List<AssistantNextActionVo> nextActions = buildNextActions(taskState);
 
         return new AssistantChatResponseVo(
                 conversationId,
@@ -292,7 +305,9 @@ public class AssistantChatService {
                 resolveAnswerSource(toolExecutions, knowledgeSources),
                 resolveFinishReason(assistantResult),
                 toolExecutions,
-                knowledgeSources
+                knowledgeSources,
+                toTaskStateVo(taskState),
+                nextActions
         );
     }
 
@@ -369,7 +384,208 @@ public class AssistantChatService {
         payload.put("finishReason", response.getFinishReason());
         payload.put("toolExecutions", response.getToolExecutions());
         payload.put("knowledgeSources", response.getKnowledgeSources());
+        payload.put("taskState", response.getTaskState());
+        payload.put("nextActions", response.getNextActions());
         return payload;
+    }
+
+    private AssistantTaskState resolveTaskState(String conversationId, Result<String> assistantResult) {
+        AssistantTaskState previousState = assistantTaskStateStore.get(conversationId);
+        AssistantTaskState nextState = deriveTaskState(assistantResult, previousState);
+        if (nextState != null) {
+            assistantTaskStateStore.save(conversationId, nextState);
+            return nextState;
+        }
+        return previousState;
+    }
+
+    private AssistantTaskState deriveTaskState(Result<String> assistantResult, AssistantTaskState previousState) {
+        if (assistantResult != null && assistantResult.toolExecutions() != null) {
+            for (ToolExecution toolExecution : assistantResult.toolExecutions()) {
+                AssistantTaskState derivedState = buildTaskStateFromToolExecution(toolExecution, previousState);
+                if (derivedState != null) {
+                    return derivedState;
+                }
+            }
+        }
+        if (assistantResult != null && assistantResult.sources() != null && !assistantResult.sources().isEmpty()) {
+            return new AssistantTaskState("KNOWLEDGE_QA", "COMPLETED", null, null, List.of());
+        }
+        return previousState;
+    }
+
+    private AssistantTaskState buildTaskStateFromToolExecution(ToolExecution toolExecution, AssistantTaskState previousState) {
+        if (toolExecution == null || toolExecution.request() == null) {
+            return null;
+        }
+
+        String toolName = toolExecution.request().name();
+        JsonNode resultNode = parseToolResult(toolExecution.result());
+        if (resultNode == null) {
+            return null;
+        }
+
+        if ("searchRooms".equals(toolName)) {
+            List<AssistantTaskState.RoomCandidate> candidates = extractRoomCandidates(resultNode.path("items"));
+            String taskStatus = candidates.isEmpty() ? "NEEDS_REFINEMENT" : "WAITING_USER_INPUT";
+            return new AssistantTaskState("ROOM_SEARCH", taskStatus, null, null, candidates);
+        }
+
+        if ("getRoomDetail".equals(toolName) || "getRoomDetailByKeyword".equals(toolName)) {
+            Long roomId = getLongValue(resultNode, "roomId");
+            String title = getTextValue(resultNode, "title");
+            List<AssistantTaskState.RoomCandidate> candidates = previousState == null
+                    ? List.of()
+                    : previousState.candidateRooms();
+            return new AssistantTaskState("ROOM_DETAIL", "WAITING_USER_INPUT", roomId, title, candidates);
+        }
+
+        if ("getMyAppointments".equals(toolName)) {
+            return new AssistantTaskState("APPOINTMENT_QUERY", "COMPLETED", null, null, List.of());
+        }
+
+        if ("getMyLeaseAgreements".equals(toolName)) {
+            return new AssistantTaskState("LEASE_QUERY", "COMPLETED", null, null, List.of());
+        }
+
+        return previousState;
+    }
+
+    private List<AssistantTaskState.RoomCandidate> extractRoomCandidates(JsonNode itemsNode) {
+        if (itemsNode == null || !itemsNode.isArray()) {
+            return List.of();
+        }
+
+        List<AssistantTaskState.RoomCandidate> candidates = new ArrayList<>();
+        for (JsonNode itemNode : itemsNode) {
+            Long roomId = getLongValue(itemNode, "roomId");
+            String title = getTextValue(itemNode, "title");
+            if (roomId == null || !StringUtils.hasText(title)) {
+                continue;
+            }
+            candidates.add(new AssistantTaskState.RoomCandidate(roomId, title));
+        }
+        return List.copyOf(candidates);
+    }
+
+    private List<AssistantNextActionVo> buildNextActions(AssistantTaskState taskState) {
+        if (taskState == null || !StringUtils.hasText(taskState.taskType())) {
+            return List.of();
+        }
+
+        List<AssistantNextActionVo> actions = new ArrayList<>();
+        if ("ROOM_SEARCH".equals(taskState.taskType())) {
+            List<AssistantTaskState.RoomCandidate> candidates = taskState.candidateRooms() == null
+                    ? List.of()
+                    : taskState.candidateRooms();
+            for (int i = 0; i < Math.min(candidates.size(), 3); i++) {
+                AssistantTaskState.RoomCandidate candidate = candidates.get(i);
+                actions.add(new AssistantNextActionVo(
+                        "VIEW_ROOM_DETAIL",
+                        "查看第" + (i + 1) + "个房源",
+                        candidate.title() + " 介绍一下",
+                        candidate.roomId()
+                ));
+            }
+            if (candidates.isEmpty()) {
+                actions.add(new AssistantNextActionVo(
+                        "REFINE_ROOM_SEARCH",
+                        "放宽条件重新查找",
+                        "帮我查一下北京市 3500 以内的房源",
+                        null
+                ));
+            } else {
+                actions.add(new AssistantNextActionVo(
+                        "REFINE_ROOM_SEARCH",
+                        "换个条件再查",
+                        "帮我再查一下其他条件的房源",
+                        null
+                ));
+            }
+            return List.copyOf(actions);
+        }
+
+        if ("ROOM_DETAIL".equals(taskState.taskType())) {
+            actions.add(new AssistantNextActionVo(
+                    "ASK_APPOINTMENT",
+                    "问这个房源能否预约",
+                    "这个房源可以预约吗",
+                    taskState.selectedRoomId()
+            ));
+            actions.add(new AssistantNextActionVo(
+                    "SEARCH_MORE_ROOMS",
+                    "继续看看其他房源",
+                    "再给我推荐几套房源",
+                    null
+            ));
+            return List.copyOf(actions);
+        }
+
+        if ("APPOINTMENT_QUERY".equals(taskState.taskType())) {
+            return List.of(
+                    new AssistantNextActionVo("VIEW_LEASES", "查看我的租约", "帮我看看我的租约", null)
+            );
+        }
+
+        if ("LEASE_QUERY".equals(taskState.taskType())) {
+            return List.of(
+                    new AssistantNextActionVo("VIEW_APPOINTMENTS", "查看我的预约", "帮我看看我的预约", null)
+            );
+        }
+
+        if ("KNOWLEDGE_QA".equals(taskState.taskType())) {
+            return List.of(
+                    new AssistantNextActionVo("SEARCH_ROOMS", "开始查房源", "帮我查一下北京市 3000 以内的房源", null)
+            );
+        }
+
+        return List.of();
+    }
+
+    private AssistantTaskStateVo toTaskStateVo(AssistantTaskState taskState) {
+        if (taskState == null) {
+            return null;
+        }
+        List<AssistantRoomCandidateVo> candidates = taskState.candidateRooms() == null
+                ? List.of()
+                : taskState.candidateRooms().stream()
+                .map(candidate -> new AssistantRoomCandidateVo(candidate.roomId(), candidate.title()))
+                .toList();
+        return new AssistantTaskStateVo(
+                taskState.taskType(),
+                taskState.taskStatus(),
+                taskState.selectedRoomId(),
+                taskState.selectedRoomTitle(),
+                candidates
+        );
+    }
+
+    private JsonNode parseToolResult(String toolResult) {
+        if (!StringUtils.hasText(toolResult)) {
+            return null;
+        }
+        try {
+            return objectMapper.readTree(toolResult);
+        } catch (Exception e) {
+            log.debug("Failed to parse tool result as JSON", e);
+            return null;
+        }
+    }
+
+    private Long getLongValue(JsonNode node, String fieldName) {
+        if (node == null || !node.hasNonNull(fieldName)) {
+            return null;
+        }
+        JsonNode valueNode = node.get(fieldName);
+        return valueNode.canConvertToLong() ? valueNode.longValue() : null;
+    }
+
+    private String getTextValue(JsonNode node, String fieldName) {
+        if (node == null || !node.hasNonNull(fieldName)) {
+            return null;
+        }
+        String value = node.get(fieldName).asText(null);
+        return StringUtils.hasText(value) ? value.trim() : null;
     }
 
     private void emitToolEvents(SseEmitter emitter, AssistantChatResponseVo response) {
@@ -491,6 +707,7 @@ public class AssistantChatService {
             return false;
         }
         memoryStore.clearConversation(conversationId);
+        assistantTaskStateStore.clear(conversationId);
         return true;
     }
 
@@ -568,10 +785,17 @@ public class AssistantChatService {
     }
 
     private long resolveStreamTimeoutMillis() {
-        long timeout = assistantProperties.getTimeout() == null
+        long baseTimeout = assistantProperties.getTimeout() == null
                 ? 60000L
                 : assistantProperties.getTimeout().toMillis();
-        return Math.max(timeout, 30000L) + 10000L;
+        int retries = assistantProperties.getMaxRetries() == null
+                ? 2
+                : Math.max(assistantProperties.getMaxRetries(), 0);
+        long attempts = retries + 1L;
+        // Synthetic stream waits for the full tool loop before emitting deltas,
+        // so reserve budget for multiple upstream attempts plus the tool-response round.
+        long timeoutBudget = baseTimeout * attempts * 2L + 15000L;
+        return Math.max(timeoutBudget, 60000L);
     }
 
     private String blankToEmpty(String value) {

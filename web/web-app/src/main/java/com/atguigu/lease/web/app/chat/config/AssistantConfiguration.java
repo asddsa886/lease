@@ -14,6 +14,7 @@ import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
 import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.service.AiServices;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -40,6 +41,10 @@ public class AssistantConfiguration {
                 .modelName(assistantProperties.getModelName())
                 .temperature(assistantProperties.getTemperature())
                 .timeout(assistantProperties.getTimeout())
+                .maxRetries(resolveMaxRetries(assistantProperties))
+                .logRequests(assistantProperties.isLogRequests())
+                .logResponses(assistantProperties.isLogResponses())
+                .logger(LoggerFactory.getLogger("assistant.openai.chat"))
                 .build();
     }
 
@@ -53,6 +58,9 @@ public class AssistantConfiguration {
                 .modelName(assistantProperties.getModelName())
                 .temperature(assistantProperties.getTemperature())
                 .timeout(assistantProperties.getTimeout())
+                .logRequests(assistantProperties.isLogRequests())
+                .logResponses(assistantProperties.isLogResponses())
+                .logger(LoggerFactory.getLogger("assistant.openai.streaming"))
                 .build();
     }
 
@@ -139,5 +147,10 @@ public class AssistantConfiguration {
 
     private String normalizeProvider(String provider) {
         return provider == null ? "" : provider.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private int resolveMaxRetries(AssistantProperties assistantProperties) {
+        Integer maxRetries = assistantProperties.getMaxRetries();
+        return maxRetries == null ? 2 : Math.max(maxRetries, 0);
     }
 }

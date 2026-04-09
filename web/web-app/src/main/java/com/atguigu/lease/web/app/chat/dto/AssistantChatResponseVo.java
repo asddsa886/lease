@@ -33,4 +33,9 @@ public class AssistantChatResponseVo {
 
     @Schema(description = "本轮命中的知识片段预览")
     private List<AssistantKnowledgeSourceVo> knowledgeSources;
+    @Schema(description = "Current task state for agent-like guidance")
+    private AssistantTaskStateVo taskState;
+
+    @Schema(description = "Suggested next actions")
+    private List<AssistantNextActionVo> nextActions;
 }
