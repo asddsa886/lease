@@ -25,6 +25,20 @@ public class AssistantTaskStateVo {
     @Schema(description = "Currently selected room title if any")
     private String selectedRoomTitle;
 
+    @Schema(description = "Currently selected apartment ID if any")
+    private Long selectedApartmentId;
+
+    @Schema(description = "Pending appointment time waiting for confirmation")
+    private String proposedAppointmentTime;
+
     @Schema(description = "Candidate rooms kept in the current conversation state")
     private List<AssistantRoomCandidateVo> candidateRooms;
+
+    public AssistantTaskStateVo(String taskType,
+                                String taskStatus,
+                                Long selectedRoomId,
+                                String selectedRoomTitle,
+                                List<AssistantRoomCandidateVo> candidateRooms) {
+        this(taskType, taskStatus, selectedRoomId, selectedRoomTitle, null, null, candidateRooms);
+    }
 }

@@ -13,6 +13,7 @@ import com.atguigu.lease.web.app.service.DistrictInfoService;
 import com.atguigu.lease.web.app.service.LeaseAgreementService;
 import com.atguigu.lease.web.app.service.ProvinceInfoService;
 import com.atguigu.lease.web.app.service.RoomInfoService;
+import com.atguigu.lease.web.app.service.UserInfoService;
 import com.atguigu.lease.web.app.service.ViewAppointmentService;
 import com.atguigu.lease.web.app.vo.agreement.AgreementItemVo;
 import com.atguigu.lease.web.app.vo.apartment.ApartmentItemVo;
@@ -56,6 +57,8 @@ class RentalAssistantToolsTest {
     private ViewAppointmentService viewAppointmentService;
     @Mock
     private LeaseAgreementService leaseAgreementService;
+    @Mock
+    private UserInfoService userInfoService;
 
     private RentalAssistantTools rentalAssistantTools;
 
@@ -71,6 +74,7 @@ class RentalAssistantToolsTest {
                 provinceInfoService,
                 viewAppointmentService,
                 leaseAgreementService,
+                userInfoService,
                 assistantProperties,
                 new ObjectMapper()
         );

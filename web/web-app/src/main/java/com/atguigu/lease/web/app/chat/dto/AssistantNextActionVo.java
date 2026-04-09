@@ -22,4 +22,11 @@ public class AssistantNextActionVo {
 
     @Schema(description = "Related room ID if any")
     private Long roomId;
+
+    @Schema(description = "Whether this action triggers a confirmable write step")
+    private Boolean needConfirmation;
+
+    public AssistantNextActionVo(String action, String label, String prompt, Long roomId) {
+        this(action, label, prompt, roomId, Boolean.FALSE);
+    }
 }

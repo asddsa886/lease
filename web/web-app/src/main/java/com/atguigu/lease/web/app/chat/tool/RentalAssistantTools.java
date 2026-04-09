@@ -2,6 +2,7 @@ package com.atguigu.lease.web.app.chat.tool;
 
 import com.atguigu.lease.common.login.LoginUser;
 import com.atguigu.lease.common.login.LoginUserHolder;
+import com.atguigu.lease.model.entity.UserInfo;
 import com.atguigu.lease.model.entity.ApartmentInfo;
 import com.atguigu.lease.model.entity.CityInfo;
 import com.atguigu.lease.model.entity.DistrictInfo;
@@ -10,10 +11,12 @@ import com.atguigu.lease.model.entity.LeaseTerm;
 import com.atguigu.lease.model.entity.PaymentType;
 import com.atguigu.lease.model.entity.ProvinceInfo;
 import com.atguigu.lease.model.entity.RoomInfo;
+import com.atguigu.lease.model.entity.ViewAppointment;
 import com.atguigu.lease.model.enums.AppointmentStatus;
 import com.atguigu.lease.model.enums.BaseEnum;
 import com.atguigu.lease.model.enums.LeaseStatus;
 import com.atguigu.lease.model.enums.ReleaseStatus;
+import com.atguigu.lease.web.app.chat.agent.AppointmentTimeParser;
 import com.atguigu.lease.web.app.chat.config.AssistantProperties;
 import com.atguigu.lease.web.app.service.ApartmentInfoService;
 import com.atguigu.lease.web.app.service.CityInfoService;
@@ -21,6 +24,7 @@ import com.atguigu.lease.web.app.service.DistrictInfoService;
 import com.atguigu.lease.web.app.service.LeaseAgreementService;
 import com.atguigu.lease.web.app.service.ProvinceInfoService;
 import com.atguigu.lease.web.app.service.RoomInfoService;
+import com.atguigu.lease.web.app.service.UserInfoService;
 import com.atguigu.lease.web.app.service.ViewAppointmentService;
 import com.atguigu.lease.web.app.vo.agreement.AgreementItemVo;
 import com.atguigu.lease.web.app.vo.appointment.AppointmentItemVo;
@@ -66,6 +70,7 @@ public class RentalAssistantTools {
     private final ProvinceInfoService provinceInfoService;
     private final ViewAppointmentService viewAppointmentService;
     private final LeaseAgreementService leaseAgreementService;
+    private final UserInfoService userInfoService;
     private final AssistantProperties assistantProperties;
     private final ObjectMapper objectMapper;
 
@@ -172,6 +177,68 @@ public class RentalAssistantTools {
         return toJson(payload);
     }
 
+    @Tool("为当前登录用户创建看房预约，需要提供房间ID和明确的预约时间，例如 明天下午 或 2026-04-10 15:00。")
+    public String createRoomAppointment(@P("房间ID") Long roomId,
+                                        @P("预约时间描述，例如 明天下午、明天15点、2026-04-10 15:00") String appointmentTimeText,
+                                        @P(value = "补充备注，可为空", required = false) String additionalInfo) {
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("tool", "createRoomAppointment");
+
+        LoginUser loginUser = requireLoginUser();
+        if (roomId == null) {
+            payload.put("summary", "缺少房间信息，暂时无法创建预约。");
+            return toJson(payload);
+        }
+
+        RoomDetailVo detail = roomInfoService.getDetailById(roomId);
+        if (detail == null || detail.getId() == null || detail.getApartmentId() == null) {
+            payload.put("summary", "没有找到可预约的房源信息，请先确认房源详情。");
+            return toJson(payload);
+        }
+
+        AppointmentTimeParser.ParsedAppointmentTime parsedAppointmentTime = AppointmentTimeParser.parse(appointmentTimeText, ZONE_ID);
+        if (parsedAppointmentTime == null) {
+            payload.put("summary", "预约时间无法识别，请明确到具体日期或时间段，例如“明天下午”或“2026-04-10 15:00”。");
+            return toJson(payload);
+        }
+
+        UserInfo userInfo = userInfoService.getById(loginUser.getId());
+        String contactName = userInfo != null && StringUtils.hasText(userInfo.getNickname())
+                ? userInfo.getNickname().trim()
+                : fallbackContactName(loginUser.getUsername());
+        String contactPhone = userInfo != null && StringUtils.hasText(userInfo.getPhone())
+                ? userInfo.getPhone().trim()
+                : loginUser.getUsername();
+
+        ViewAppointment appointment = new ViewAppointment();
+        appointment.setUserId(loginUser.getId());
+        appointment.setName(contactName);
+        appointment.setPhone(contactPhone);
+        appointment.setApartmentId(detail.getApartmentId());
+        appointment.setAppointmentTime(parsedAppointmentTime.date());
+        if (StringUtils.hasText(additionalInfo)) {
+            appointment.setAdditionalInfo(additionalInfo.trim());
+        }
+
+        viewAppointmentService.saveOrUpdateForCurrentUser(appointment, loginUser.getId());
+
+        payload.put("summary", "已为你创建看房预约，请留意预约时间并按时到场。");
+        payload.put("appointmentId", appointment.getId());
+        payload.put("appointmentTime", parsedAppointmentTime.displayText());
+        payload.put("appointmentStatusText", AppointmentStatus.WAITING.getName());
+        payload.put("roomId", detail.getId());
+        payload.put("apartmentId", detail.getApartmentId());
+        payload.put("title", buildRoomTitle(
+                detail.getApartmentItemVo() == null ? null : detail.getApartmentItemVo().getName(),
+                detail.getRoomNumber()));
+        payload.put("locationText", buildLocationText(
+                detail.getApartmentItemVo() == null ? null : detail.getApartmentItemVo().getProvinceName(),
+                detail.getApartmentItemVo() == null ? null : detail.getApartmentItemVo().getCityName(),
+                detail.getApartmentItemVo() == null ? null : detail.getApartmentItemVo().getDistrictName(),
+                detail.getApartmentItemVo() == null ? null : detail.getApartmentItemVo().getAddressDetail()));
+        return toJson(payload);
+    }
+
     private Map<String, Object> buildSearchFilters(RegionMatch regionMatch,
                                                    String regionKeyword,
                                                    BigDecimal minRent,
@@ -242,6 +309,7 @@ public class RentalAssistantTools {
 
         payload.put("summary", summary);
         payload.put("roomId", detail.getId());
+        payload.put("apartmentId", detail.getApartmentId());
         payload.put("title", buildRoomTitle(
                 detail.getApartmentItemVo() == null ? null : detail.getApartmentItemVo().getName(),
                 detail.getRoomNumber()));
@@ -391,6 +459,13 @@ public class RentalAssistantTools {
             return fallback;
         }
         return value.trim();
+    }
+
+    private String fallbackContactName(String phone) {
+        if (!StringUtils.hasText(phone) || phone.length() < 4) {
+            return "租客用户";
+        }
+        return "用户-" + phone.substring(phone.length() - 4);
     }
 
     private void appendIfPresent(List<String> parts, String value) {

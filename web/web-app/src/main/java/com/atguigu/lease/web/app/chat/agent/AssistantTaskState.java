@@ -7,6 +7,8 @@ public record AssistantTaskState(
         String taskStatus,
         Long selectedRoomId,
         String selectedRoomTitle,
+        Long selectedApartmentId,
+        String proposedAppointmentTime,
         List<RoomCandidate> candidateRooms
 ) {
 

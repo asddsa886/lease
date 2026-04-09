@@ -1,11 +1,15 @@
 package com.atguigu.lease.web.app.chat.service;
 
 import com.atguigu.lease.common.exception.LeaseException;
+import com.atguigu.lease.common.login.LoginUser;
+import com.atguigu.lease.common.login.LoginUserHolder;
 import com.atguigu.lease.common.result.ResultCodeEnum;
+import com.atguigu.lease.web.app.chat.agent.AssistantTaskState;
 import com.atguigu.lease.web.app.chat.agent.AssistantTaskStateStore;
 import com.atguigu.lease.web.app.chat.config.AssistantProperties;
 import com.atguigu.lease.web.app.chat.dto.AssistantChatResponseVo;
 import com.atguigu.lease.web.app.chat.memory.AssistantMongoChatMemoryStore;
+import com.atguigu.lease.web.app.chat.tool.RentalAssistantTools;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.service.Result;
 import dev.langchain4j.service.tool.ToolExecution;
@@ -34,20 +38,25 @@ class AssistantChatServiceTest {
     private ObjectProvider<StreamingRentalAssistant> streamingRentalAssistantProvider;
     @Mock
     private ObjectProvider<AssistantMongoChatMemoryStore> assistantChatMemoryStoreProvider;
+    @Mock
+    private RentalAssistantTools rentalAssistantTools;
 
     private AssistantProperties assistantProperties;
     private AssistantChatService assistantChatService;
+    private AssistantTaskStateStore assistantTaskStateStore;
 
     @BeforeEach
     void setUp() {
         assistantProperties = new AssistantProperties();
         assistantProperties.setEnabled(true);
+        assistantTaskStateStore = new AssistantTaskStateStore();
         assistantChatService = new AssistantChatService(
                 assistantProperties,
                 rentalAssistantProvider,
                 streamingRentalAssistantProvider,
                 assistantChatMemoryStoreProvider,
-                new AssistantTaskStateStore(),
+                rentalAssistantTools,
+                assistantTaskStateStore,
                 new ObjectMapper()
         );
     }
@@ -122,6 +131,54 @@ class AssistantChatServiceTest {
         assertEquals(2, response.getTaskState().getCandidateRooms().size());
         assertEquals(3, response.getNextActions().size());
         assertEquals("VIEW_ROOM_DETAIL", response.getNextActions().get(0).getAction());
+    }
+
+    @Test
+    void chat_shouldEnterAppointmentConfirmingStateForRoomDetailConversation() {
+        LoginUserHolder.set(new LoginUser(8L, "17503976585"));
+        assistantTaskStateStore.save(
+                "room-chat-001",
+                new AssistantTaskState("ROOM_DETAIL", "WAITING_USER_INPUT", 2L, "Huilongguan Room 102", 12L, null, List.of())
+        );
+        when(rentalAssistantProvider.getIfAvailable()).thenReturn((conversationId, message) -> result("unused"));
+
+        AssistantChatResponseVo response = assistantChatService.chat("帮我预约明天下午", "room-chat-001");
+
+        assertEquals("APPOINTMENT_CONFIRMING", response.getTaskState().getTaskType());
+        assertEquals("WAITING_CONFIRMATION", response.getTaskState().getTaskStatus());
+        assertEquals(2L, response.getTaskState().getSelectedRoomId());
+        assertEquals(12L, response.getTaskState().getSelectedApartmentId());
+        assertFalse(response.getTaskState().getProposedAppointmentTime().isBlank());
+        assertEquals("CONFIRM_APPOINTMENT", response.getNextActions().get(0).getAction());
+    }
+
+    @Test
+    void chat_shouldCreateAppointmentAfterConfirmation() {
+        LoginUserHolder.set(new LoginUser(8L, "17503976585"));
+        assistantTaskStateStore.save(
+                "room-chat-001",
+                new AssistantTaskState("APPOINTMENT_CONFIRMING", "WAITING_CONFIRMATION", 2L, "Huilongguan Room 102", 12L, "明天下午", List.of())
+        );
+        when(rentalAssistantProvider.getIfAvailable()).thenReturn((conversationId, message) -> result("unused"));
+        when(rentalAssistantTools.createRoomAppointment(2L, "明天下午", null)).thenReturn("""
+                {
+                  "tool": "createRoomAppointment",
+                  "summary": "预约已创建成功",
+                  "appointmentId": 1001,
+                  "appointmentTime": "明天下午",
+                  "roomId": 2,
+                  "apartmentId": 12,
+                  "title": "Huilongguan Room 102"
+                }
+                """);
+
+        AssistantChatResponseVo response = assistantChatService.chat("确认", "room-chat-001");
+
+        assertEquals("tool", response.getAnswerSource());
+        assertEquals("APPOINTMENT_CREATED", response.getTaskState().getTaskType());
+        assertEquals("COMPLETED", response.getTaskState().getTaskStatus());
+        assertEquals("明天下午", response.getTaskState().getProposedAppointmentTime());
+        assertEquals("VIEW_APPOINTMENTS", response.getNextActions().get(0).getAction());
     }
 
     private Result<String> result(String content) {
