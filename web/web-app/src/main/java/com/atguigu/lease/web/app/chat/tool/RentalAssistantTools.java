@@ -239,6 +239,62 @@ public class RentalAssistantTools {
         return toJson(payload);
     }
 
+    @Tool("取消当前登录用户的一条看房预约，需要提供预约ID")
+    public String cancelAppointment(@P("预约ID") Long appointmentId) {
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("tool", "cancelAppointment");
+
+        LoginUser loginUser = requireLoginUser();
+        if (appointmentId == null) {
+            payload.put("summary", "缺少预约ID，暂时无法取消预约。");
+            return toJson(payload);
+        }
+
+        ViewAppointment appointment = viewAppointmentService.getById(appointmentId);
+        if (appointment == null) {
+            payload.put("summary", "没有找到对应的预约记录。");
+            return toJson(payload);
+        }
+        if (!loginUser.getId().equals(appointment.getUserId())) {
+            payload.put("summary", "当前预约不属于你，无法执行取消操作。");
+            return toJson(payload);
+        }
+
+        ApartmentInfo apartmentInfo = apartmentInfoService.getById(appointment.getApartmentId());
+        String apartmentName = apartmentInfo == null ? null : apartmentInfo.getName();
+        String appointmentTime = formatDateTime(appointment.getAppointmentTime());
+
+        if (appointment.getAppointmentStatus() == AppointmentStatus.CANCELED) {
+            payload.put("summary", "这条预约已经取消，不需要重复操作。");
+            payload.put("appointmentId", appointmentId);
+            payload.put("appointmentStatusCode", AppointmentStatus.CANCELED.getCode());
+            payload.put("appointmentStatusText", AppointmentStatus.CANCELED.getName());
+            payload.put("apartmentName", safeText(apartmentName, "待确认公寓"));
+            payload.put("appointmentTime", appointmentTime);
+            return toJson(payload);
+        }
+
+        if (appointment.getAppointmentStatus() != AppointmentStatus.WAITING) {
+            payload.put("summary", "当前预约状态不是“待看房”，暂时不能取消。");
+            payload.put("appointmentId", appointmentId);
+            payload.put("appointmentStatusCode", appointment.getAppointmentStatus() == null ? null : appointment.getAppointmentStatus().getCode());
+            payload.put("appointmentStatusText", enumName(appointment.getAppointmentStatus(), "状态待确认"));
+            payload.put("apartmentName", safeText(apartmentName, "待确认公寓"));
+            payload.put("appointmentTime", appointmentTime);
+            return toJson(payload);
+        }
+
+        ViewAppointment canceled = viewAppointmentService.cancelForCurrentUser(appointmentId, loginUser.getId());
+        payload.put("summary", "已为你取消这条看房预约。");
+        payload.put("appointmentId", appointmentId);
+        payload.put("appointmentStatusCode", AppointmentStatus.CANCELED.getCode());
+        payload.put("appointmentStatusText", AppointmentStatus.CANCELED.getName());
+        payload.put("apartmentName", safeText(apartmentName, "待确认公寓"));
+        payload.put("appointmentTime", appointmentTime);
+        payload.put("apartmentId", canceled.getApartmentId());
+        return toJson(payload);
+    }
+
     private Map<String, Object> buildSearchFilters(RegionMatch regionMatch,
                                                    String regionKeyword,
                                                    BigDecimal minRent,
@@ -342,6 +398,7 @@ public class RentalAssistantTools {
         appointment.put("appointmentId", item.getId());
         appointment.put("apartmentName", safeText(item.getApartmentName(), "待确认公寓"));
         appointment.put("appointmentTime", formatDateTime(item.getAppointmentTime()));
+        appointment.put("appointmentStatusCode", item.getAppointmentStatus() == null ? null : item.getAppointmentStatus().getCode());
         appointment.put("statusText", enumName(item.getAppointmentStatus(), "状态待确认"));
         if (!notes.isEmpty()) {
             appointment.put("notes", notes);

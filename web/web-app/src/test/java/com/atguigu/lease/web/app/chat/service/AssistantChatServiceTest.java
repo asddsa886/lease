@@ -181,6 +181,73 @@ class AssistantChatServiceTest {
         assertEquals("VIEW_APPOINTMENTS", response.getNextActions().get(0).getAction());
     }
 
+    @Test
+    void chat_shouldExposeLatestCancelableAppointmentAfterAppointmentQuery() {
+        ToolExecution toolExecution = mock(ToolExecution.class, RETURNS_DEEP_STUBS);
+        when(toolExecution.request().name()).thenReturn("getMyAppointments");
+        when(toolExecution.request().arguments()).thenReturn("{}");
+        when(toolExecution.result()).thenReturn("""
+                {
+                  "tool":"getMyAppointments",
+                  "items":[
+                    {"appointmentId":13,"apartmentName":"Wendu Apartment","appointmentTime":"2026-04-11 15:00","appointmentStatusCode":1},
+                    {"appointmentId":12,"apartmentName":"Older Appointment","appointmentTime":"2025-11-21 12:00","appointmentStatusCode":3}
+                  ]
+                }
+                """);
+        when(toolExecution.hasFailed()).thenReturn(false);
+        when(rentalAssistantProvider.getIfAvailable()).thenReturn((conversationId, message) ->
+                new Result<String>("Appointments found.", null, List.of(), null, List.of(toolExecution)));
+
+        AssistantChatResponseVo response = assistantChatService.chat("帮我看一下我的预约", "room-chat-001");
+
+        assertEquals("APPOINTMENT_QUERY", response.getTaskState().getTaskType());
+        assertEquals(13L, response.getTaskState().getSelectedAppointmentId());
+        assertEquals("CANCEL_LATEST_APPOINTMENT", response.getNextActions().get(0).getAction());
+    }
+
+    @Test
+    void chat_shouldCancelAppointmentAfterConfirmation() {
+        LoginUserHolder.set(new LoginUser(8L, "17503976585"));
+        assistantTaskStateStore.save(
+                "room-chat-001",
+                new AssistantTaskState(
+                        "APPOINTMENT_QUERY",
+                        "COMPLETED",
+                        null,
+                        null,
+                        null,
+                        13L,
+                        "预约ID 13 / Wendu Apartment / 2026-04-11 15:00",
+                        null,
+                        List.of()
+                )
+        );
+        when(rentalAssistantProvider.getIfAvailable()).thenReturn((conversationId, message) -> result("unused"));
+        when(rentalAssistantTools.cancelAppointment(13L)).thenReturn("""
+                {
+                  "tool": "cancelAppointment",
+                  "summary": "已为你取消这条看房预约。",
+                  "appointmentId": 13,
+                  "appointmentStatusCode": 2,
+                  "appointmentStatusText": "已取消",
+                  "apartmentName": "Wendu Apartment",
+                  "appointmentTime": "2026-04-11 15:00"
+                }
+                """);
+
+        AssistantChatResponseVo confirmResponse = assistantChatService.chat("取消最新预约", "room-chat-001");
+        assertEquals("APPOINTMENT_CANCEL_CONFIRMING", confirmResponse.getTaskState().getTaskType());
+        assertEquals("CONFIRM_CANCEL_APPOINTMENT", confirmResponse.getNextActions().get(0).getAction());
+
+        AssistantChatResponseVo response = assistantChatService.chat("确认", "room-chat-001");
+
+        assertEquals("tool", response.getAnswerSource());
+        assertEquals("APPOINTMENT_CANCELED", response.getTaskState().getTaskType());
+        assertEquals("COMPLETED", response.getTaskState().getTaskStatus());
+        assertEquals(13L, response.getTaskState().getSelectedAppointmentId());
+    }
+
     private Result<String> result(String content) {
         return new Result<>(content, null, List.of(), null, List.of());
     }

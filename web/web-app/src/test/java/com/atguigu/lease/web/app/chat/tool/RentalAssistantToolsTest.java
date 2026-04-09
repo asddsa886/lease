@@ -5,6 +5,8 @@ import com.atguigu.lease.common.login.LoginUserHolder;
 import com.atguigu.lease.model.entity.ApartmentInfo;
 import com.atguigu.lease.model.entity.CityInfo;
 import com.atguigu.lease.model.entity.RoomInfo;
+import com.atguigu.lease.model.entity.ViewAppointment;
+import com.atguigu.lease.model.enums.AppointmentStatus;
 import com.atguigu.lease.model.enums.ReleaseStatus;
 import com.atguigu.lease.web.app.chat.config.AssistantProperties;
 import com.atguigu.lease.web.app.service.ApartmentInfoService;
@@ -173,5 +175,29 @@ class RentalAssistantToolsTest {
         assertTrue(json.contains("\"tool\":\"getMyLeaseAgreements\""));
         assertTrue(json.contains("当前共有 1 条租约记录。"));
         assertTrue(json.contains("价格待确认"));
+    }
+    @Test
+    void cancelAppointment_shouldCancelWaitingAppointment() {
+        LoginUserHolder.set(new LoginUser(8L, "17503976585"));
+
+        ViewAppointment appointment = new ViewAppointment();
+        appointment.setId(13L);
+        appointment.setUserId(8L);
+        appointment.setApartmentId(12L);
+        appointment.setAppointmentStatus(AppointmentStatus.WAITING);
+        when(viewAppointmentService.getById(13L)).thenReturn(appointment);
+
+        ApartmentInfo apartmentInfo = new ApartmentInfo();
+        apartmentInfo.setId(12L);
+        apartmentInfo.setName("Wendu Apartment");
+        when(apartmentInfoService.getById(12L)).thenReturn(apartmentInfo);
+        when(viewAppointmentService.cancelForCurrentUser(13L, 8L)).thenReturn(appointment);
+
+        String json = rentalAssistantTools.cancelAppointment(13L);
+
+        verify(viewAppointmentService).cancelForCurrentUser(13L, 8L);
+        assertTrue(json.contains("\"tool\":\"cancelAppointment\""));
+        assertTrue(json.contains("\"appointmentId\":13"));
+        assertTrue(json.contains("已为你取消这条看房预约"));
     }
 }

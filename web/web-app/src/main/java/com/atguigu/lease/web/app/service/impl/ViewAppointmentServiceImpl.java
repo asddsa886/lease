@@ -98,6 +98,26 @@ public class ViewAppointmentServiceImpl extends ServiceImpl<ViewAppointmentMappe
 
         this.updateById(viewAppointment);
     }
+
+    @Override
+    public ViewAppointment cancelForCurrentUser(Long appointmentId, Long currentUserId) {
+        if (appointmentId == null || currentUserId == null) {
+            throw new LeaseException(ResultCodeEnum.PARAM_ERROR);
+        }
+
+        ViewAppointment db = this.getById(appointmentId);
+        if (db == null) {
+            throw new LeaseException(ResultCodeEnum.DATA_ERROR);
+        }
+        if (!currentUserId.equals(db.getUserId())) {
+            throw new LeaseException(ResultCodeEnum.ILLEGAL_REQUEST);
+        }
+        if (db.getAppointmentStatus() == AppointmentStatus.WAITING) {
+            db.setAppointmentStatus(AppointmentStatus.CANCELED);
+            this.updateById(db);
+        }
+        return db;
+    }
 }
 
 
