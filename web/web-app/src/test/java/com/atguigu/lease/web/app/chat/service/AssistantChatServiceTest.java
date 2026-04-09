@@ -5,6 +5,7 @@ import com.atguigu.lease.common.result.ResultCodeEnum;
 import com.atguigu.lease.web.app.chat.config.AssistantProperties;
 import com.atguigu.lease.web.app.chat.dto.AssistantChatResponseVo;
 import com.atguigu.lease.web.app.chat.memory.AssistantMongoChatMemoryStore;
+import dev.langchain4j.service.Result;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,22 +47,26 @@ class AssistantChatServiceTest {
 
     @Test
     void chat_shouldFormatReplyAndSplitParagraphs() {
-        when(rentalAssistantProvider.getIfAvailable()).thenReturn((conversationId, message) -> """
-                第一段
-
-                - 第二段
-                """);
+        when(rentalAssistantProvider.getIfAvailable()).thenReturn((conversationId, message) ->
+                result("""
+                        第一段
+                        - 第二段
+                        """));
 
         AssistantChatResponseVo response = assistantChatService.chat(" 你好 ");
 
         assertFalse(response.getConversationId().isBlank());
         assertEquals("第一段\n• 第二段", response.getReply());
         assertEquals(List.of("第一段\n• 第二段"), response.getParagraphs());
+        assertEquals("model", response.getAnswerSource());
+        assertEquals("unknown", response.getFinishReason());
+        assertEquals(List.of(), response.getToolExecutions());
+        assertEquals(List.of(), response.getKnowledgeSources());
     }
 
     @Test
     void chat_shouldReturnFallbackWhenModelReplyIsBlank() {
-        when(rentalAssistantProvider.getIfAvailable()).thenReturn((conversationId, message) -> "   ");
+        when(rentalAssistantProvider.getIfAvailable()).thenReturn((conversationId, message) -> result("   "));
 
         AssistantChatResponseVo response = assistantChatService.chat("你可以帮我做什么？");
 
@@ -71,7 +76,7 @@ class AssistantChatServiceTest {
 
     @Test
     void chat_shouldReuseConversationId() {
-        when(rentalAssistantProvider.getIfAvailable()).thenReturn((conversationId, message) -> "好的");
+        when(rentalAssistantProvider.getIfAvailable()).thenReturn((conversationId, message) -> result("好的"));
 
         AssistantChatResponseVo response = assistantChatService.chat("你好", "room-chat-001");
 
@@ -85,5 +90,9 @@ class AssistantChatServiceTest {
         LeaseException exception = assertThrows(LeaseException.class, () -> assistantChatService.chat("你好"));
 
         assertEquals(ResultCodeEnum.SERVICE_ERROR.getCode(), exception.getCode());
+    }
+
+    private Result<String> result(String content) {
+        return new Result<>(content, null, List.of(), null, List.of());
     }
 }

@@ -84,7 +84,7 @@ app:
       enabled: ${APP_AI_ASSISTANT_ENABLED:true}
       provider: ${APP_AI_ASSISTANT_PROVIDER:openai-compatible}
       base-url: ${APP_AI_ASSISTANT_BASE_URL:https://eo.ai.hybgzs.com/v1}
-      model-name: ${APP_AI_ASSISTANT_MODEL:gpt-4.1-mini}
+      model-name: ${APP_AI_ASSISTANT_MODEL:z-ai/glm5}
       api-key: ${APP_AI_ASSISTANT_API_KEY:sk-bTxqZY8GnhFm8ZG_9vWkv0aQ8mRkb3yl1junDKbKPwcnlxEk1aUAyUHN0pM}
       temperature: ${APP_AI_ASSISTANT_TEMPERATURE:0.2}
       timeout: ${APP_AI_ASSISTANT_TIMEOUT:60s}

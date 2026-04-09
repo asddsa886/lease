@@ -19,6 +19,18 @@ public class AssistantChatResponseVo {
     @Schema(description = "助手自然语言回复")
     private String reply;
 
-    @Schema(description = "按段落拆分后的回复，便于前端展示")
+    @Schema(description = "按段落拆分后的回复，便于前端渲染")
     private List<String> paragraphs;
+
+    @Schema(description = "本轮答案来源，可能值：model / tool / rag / tool+rag")
+    private String answerSource;
+
+    @Schema(description = "模型结束原因")
+    private String finishReason;
+
+    @Schema(description = "本轮执行过的工具列表")
+    private List<AssistantToolExecutionVo> toolExecutions;
+
+    @Schema(description = "本轮命中的知识片段预览")
+    private List<AssistantKnowledgeSourceVo> knowledgeSources;
 }
