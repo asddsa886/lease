@@ -12,6 +12,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.Date;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -116,6 +117,28 @@ public class ViewAppointmentServiceImpl extends ServiceImpl<ViewAppointmentMappe
             db.setAppointmentStatus(AppointmentStatus.CANCELED);
             this.updateById(db);
         }
+        return db;
+    }
+
+    @Override
+    public ViewAppointment rescheduleForCurrentUser(Long appointmentId, Date appointmentTime, Long currentUserId) {
+        if (appointmentId == null || appointmentTime == null || currentUserId == null) {
+            throw new LeaseException(ResultCodeEnum.PARAM_ERROR);
+        }
+
+        ViewAppointment db = this.getById(appointmentId);
+        if (db == null) {
+            throw new LeaseException(ResultCodeEnum.DATA_ERROR);
+        }
+        if (!currentUserId.equals(db.getUserId())) {
+            throw new LeaseException(ResultCodeEnum.ILLEGAL_REQUEST);
+        }
+        if (db.getAppointmentStatus() != AppointmentStatus.WAITING) {
+            throw new LeaseException(ResultCodeEnum.ILLEGAL_REQUEST);
+        }
+
+        db.setAppointmentTime(appointmentTime);
+        this.updateById(db);
         return db;
     }
 }

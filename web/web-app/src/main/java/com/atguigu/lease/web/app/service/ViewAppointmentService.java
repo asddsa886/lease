@@ -21,4 +21,6 @@ public interface ViewAppointmentService extends IService<ViewAppointment> {
     void saveOrUpdateForCurrentUser(ViewAppointment viewAppointment, Long currentUserId);
 
     ViewAppointment cancelForCurrentUser(Long appointmentId, Long currentUserId);
+
+    ViewAppointment rescheduleForCurrentUser(Long appointmentId, java.util.Date appointmentTime, Long currentUserId);
 }

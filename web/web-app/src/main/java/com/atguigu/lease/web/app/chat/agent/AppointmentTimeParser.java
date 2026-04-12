@@ -5,6 +5,7 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.Locale;
@@ -16,6 +17,7 @@ public final class AppointmentTimeParser {
     private static final Pattern RELATIVE_PATTERN = Pattern.compile("(今天|明天|后天)(上午|中午|下午|晚上)?(?:(\\d{1,2})(?:点|:|：)(\\d{1,2})?)?");
     private static final Pattern ABSOLUTE_DATE_TIME_PATTERN = Pattern.compile("(\\d{4})[-/年](\\d{1,2})[-/月](\\d{1,2})(?:日)?(?:\\s*(上午|中午|下午|晚上))?(?:\\s*(\\d{1,2})(?:点|:|：)(\\d{1,2})?)?");
     private static final Pattern MONTH_DAY_PATTERN = Pattern.compile("(\\d{1,2})月(\\d{1,2})(?:日|号)?(?:\\s*(上午|中午|下午|晚上))?(?:\\s*(\\d{1,2})(?:点|:|：)(\\d{1,2})?)?");
+    private static final Pattern DAY_OF_MONTH_PATTERN = Pattern.compile("(\\d{1,2})(?:日|号)(?:的)?(?:\\s*(上午|中午|下午|晚上))?(?:\\s*(\\d{1,2})(?:点|:|：)(\\d{1,2})?)?");
     private static final DateTimeFormatter DISPLAY_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private AppointmentTimeParser() {
@@ -35,6 +37,11 @@ public final class AppointmentTimeParser {
         }
 
         parsed = parseAbsolute(normalized, now, zoneId);
+        if (parsed != null) {
+            return parsed;
+        }
+
+        parsed = parseDayOfMonth(normalized, now, zoneId);
         if (parsed != null) {
             return parsed;
         }
@@ -96,6 +103,44 @@ public final class AppointmentTimeParser {
             candidateDate = candidateDate.plusYears(1);
         }
         return toParsed(candidateDate.atTime(hour, minute), now, zoneId);
+    }
+
+    private static ParsedAppointmentTime parseDayOfMonth(String normalized, LocalDateTime now, ZoneId zoneId) {
+        Matcher matcher = DAY_OF_MONTH_PATTERN.matcher(normalized);
+        if (!matcher.find()) {
+            return null;
+        }
+
+        int day = Integer.parseInt(matcher.group(1));
+        Integer explicitHour = parseInteger(matcher.group(3));
+        Integer explicitMinute = parseInteger(matcher.group(4));
+        int hour = resolveHour(matcher.group(2), explicitHour);
+        int minute = explicitMinute == null ? 0 : explicitMinute;
+
+        LocalDate candidateDate = resolveFutureDateForDayOfMonth(day, hour, minute, now);
+        if (candidateDate == null) {
+            return null;
+        }
+        return toParsed(candidateDate.atTime(hour, minute), now, zoneId);
+    }
+
+    private static LocalDate resolveFutureDateForDayOfMonth(int day, int hour, int minute, LocalDateTime now) {
+        if (day < 1 || day > 31) {
+            return null;
+        }
+
+        YearMonth currentMonth = YearMonth.from(now);
+        for (int offset = 0; offset < 12; offset++) {
+            YearMonth candidateMonth = currentMonth.plusMonths(offset);
+            if (day > candidateMonth.lengthOfMonth()) {
+                continue;
+            }
+            LocalDate candidateDate = candidateMonth.atDay(day);
+            if (!candidateDate.atTime(hour, minute).isBefore(now.plusMinutes(5))) {
+                return candidateDate;
+            }
+        }
+        return null;
     }
 
     private static ParsedAppointmentTime toParsed(LocalDateTime dateTime, LocalDateTime now, ZoneId zoneId) {

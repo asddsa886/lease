@@ -74,7 +74,7 @@ public class RentalAssistantTools {
     private final AssistantProperties assistantProperties;
     private final ObjectMapper objectMapper;
 
-    @Tool("按条件查询房源列表，可根据省市区名称、最低月租、最高月租筛选房源。")
+    @Tool("查询平台数据库中的真实房源列表。用户询问某城市、某区、某预算范围内的房源时，必须优先调用这个工具，不要用公开市场信息代替。")
     public String searchRooms(
             @P(value = "区域名称，例如北京市、朝阳区", required = false) String districtName,
             @P(value = "最低月租，单位元", required = false) BigDecimal minRent,
@@ -113,13 +113,13 @@ public class RentalAssistantTools {
         return toJson(payload);
     }
 
-    @Tool("根据房间ID查询房间详情，包括公寓名称、租金、标签、支付方式、租期等。")
+    @Tool("查询平台数据库中的真实房间详情。用户询问某个房间的介绍、配置、租金、支付方式、租期等时，必须优先调用这个工具。")
     public String getRoomDetail(@P("房间ID") Long roomId) {
         RoomDetailVo detail = roomInfoService.getDetailById(roomId);
         return buildRoomDetailPayload(detail, "已获取房间详情。");
     }
 
-    @Tool("根据公寓名、小区名、房号等线索查询房间详情，适合处理“温都水城社区101介绍一下”这类问题。")
+    @Tool("根据公寓名、小区名、房号等线索查询平台数据库中的真实房间详情，适合处理“温都水城社区101介绍一下”这类问题。")
     public String getRoomDetailByKeyword(@P("房间线索，例如温都水城社区101") String roomKeyword) {
         if (!StringUtils.hasText(roomKeyword)) {
             return toJson(Map.of("tool", "getRoomDetailByKeyword", "summary", "请提供公寓名或房号线索。"));
@@ -145,7 +145,7 @@ public class RentalAssistantTools {
         return buildRoomDetailPayload(roomInfoService.getDetailById(roomInfo.getId()), "已根据公寓名和房号找到房间详情。");
     }
 
-    @Tool("查询当前登录用户的看房预约列表。")
+    @Tool("查询当前登录用户在平台内的真实看房预约列表。用户说“我的预约”“查预约”“预约记录”时，必须优先调用这个工具。")
     public String getMyAppointments() {
         LoginUser loginUser = requireLoginUser();
         List<AppointmentItemVo> appointments = viewAppointmentService.getDetailByUserId(loginUser.getId());
@@ -161,7 +161,7 @@ public class RentalAssistantTools {
         return toJson(payload);
     }
 
-    @Tool("查询当前登录用户的租约列表。")
+    @Tool("查询当前登录用户在平台内的真实租约列表。用户说“我的租约”“查租约”“租约记录”时，必须优先调用这个工具。")
     public String getMyLeaseAgreements() {
         LoginUser loginUser = requireLoginUser();
         List<AgreementItemVo> agreements = leaseAgreementService.listItemByPhone(loginUser.getUsername());
@@ -292,6 +292,67 @@ public class RentalAssistantTools {
         payload.put("apartmentName", safeText(apartmentName, "待确认公寓"));
         payload.put("appointmentTime", appointmentTime);
         payload.put("apartmentId", canceled.getApartmentId());
+        return toJson(payload);
+    }
+
+    @Tool("修改当前登录用户的一条看房预约时间，需要提供预约ID和新的预约时间，例如 明天下午 或 2026-04-10 15:00")
+    public String rescheduleAppointment(@P("预约ID") Long appointmentId,
+                                        @P("新的预约时间描述，例如 明天下午、明天15点、2026-04-10 15:00") String appointmentTimeText) {
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("tool", "rescheduleAppointment");
+
+        LoginUser loginUser = requireLoginUser();
+        if (appointmentId == null) {
+            payload.put("summary", "缺少预约ID，暂时无法修改预约时间。");
+            return toJson(payload);
+        }
+
+        ViewAppointment appointment = viewAppointmentService.getById(appointmentId);
+        if (appointment == null) {
+            payload.put("summary", "没有找到对应的预约记录。");
+            return toJson(payload);
+        }
+        if (!loginUser.getId().equals(appointment.getUserId())) {
+            payload.put("summary", "当前预约不属于你，无法执行改约操作。");
+            return toJson(payload);
+        }
+
+        ApartmentInfo apartmentInfo = apartmentInfoService.getById(appointment.getApartmentId());
+        String apartmentName = apartmentInfo == null ? null : apartmentInfo.getName();
+        String originalAppointmentTime = formatDateTime(appointment.getAppointmentTime());
+        payload.put("appointmentId", appointmentId);
+        payload.put("apartmentName", safeText(apartmentName, "待确认公寓"));
+        payload.put("originalAppointmentTime", originalAppointmentTime);
+
+        if (appointment.getAppointmentStatus() == AppointmentStatus.CANCELED) {
+            payload.put("summary", "这条预约已经取消，不能继续改约。");
+            payload.put("appointmentStatusCode", AppointmentStatus.CANCELED.getCode());
+            payload.put("appointmentStatusText", AppointmentStatus.CANCELED.getName());
+            return toJson(payload);
+        }
+        if (appointment.getAppointmentStatus() != AppointmentStatus.WAITING) {
+            payload.put("summary", "当前预约状态不是“待看房”，暂时不能改约。");
+            payload.put("appointmentStatusCode", appointment.getAppointmentStatus() == null ? null : appointment.getAppointmentStatus().getCode());
+            payload.put("appointmentStatusText", enumName(appointment.getAppointmentStatus(), "状态待确认"));
+            return toJson(payload);
+        }
+
+        AppointmentTimeParser.ParsedAppointmentTime parsedAppointmentTime = AppointmentTimeParser.parse(appointmentTimeText, ZONE_ID);
+        if (parsedAppointmentTime == null) {
+            payload.put("summary", "新的预约时间无法识别，请明确到具体日期或时间段，例如“明天下午”或“2026-04-10 15:00”。");
+            return toJson(payload);
+        }
+
+        ViewAppointment rescheduled = viewAppointmentService.rescheduleForCurrentUser(
+                appointmentId,
+                parsedAppointmentTime.date(),
+                loginUser.getId()
+        );
+        payload.put("summary", "已为你修改预约时间，请按新的预约时间到场。");
+        payload.put("appointmentStatusCode", AppointmentStatus.WAITING.getCode());
+        payload.put("appointmentStatusText", AppointmentStatus.WAITING.getName());
+        payload.put("appointmentTime", parsedAppointmentTime.displayText());
+        payload.put("apartmentId", rescheduled.getApartmentId());
         return toJson(payload);
     }
 

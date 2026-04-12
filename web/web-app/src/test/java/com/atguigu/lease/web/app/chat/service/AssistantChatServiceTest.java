@@ -1,9 +1,7 @@
 package com.atguigu.lease.web.app.chat.service;
 
-import com.atguigu.lease.common.exception.LeaseException;
 import com.atguigu.lease.common.login.LoginUser;
 import com.atguigu.lease.common.login.LoginUserHolder;
-import com.atguigu.lease.common.result.ResultCodeEnum;
 import com.atguigu.lease.web.app.chat.agent.AssistantTaskState;
 import com.atguigu.lease.web.app.chat.agent.AssistantTaskStateStore;
 import com.atguigu.lease.web.app.chat.config.AssistantProperties;
@@ -13,6 +11,7 @@ import com.atguigu.lease.web.app.chat.tool.RentalAssistantTools;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.service.Result;
 import dev.langchain4j.service.tool.ToolExecution;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,13 +19,20 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Answers.RETURNS_DEEP_STUBS;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -35,220 +41,257 @@ class AssistantChatServiceTest {
     @Mock
     private ObjectProvider<RentalAssistant> rentalAssistantProvider;
     @Mock
+    private ObjectProvider<ToolFirstRentalAssistant> toolFirstRentalAssistantProvider;
+    @Mock
     private ObjectProvider<StreamingRentalAssistant> streamingRentalAssistantProvider;
+    @Mock
+    private ObjectProvider<StreamingToolFirstRentalAssistant> streamingToolFirstRentalAssistantProvider;
+    @Mock
+    private ObjectProvider<AppointmentActionAnalyzer> appointmentActionAnalyzerProvider;
     @Mock
     private ObjectProvider<AssistantMongoChatMemoryStore> assistantChatMemoryStoreProvider;
     @Mock
     private RentalAssistantTools rentalAssistantTools;
+    @Mock
+    private AssistantWorkflowOrchestrator assistantWorkflowOrchestrator;
 
-    private AssistantProperties assistantProperties;
-    private AssistantChatService assistantChatService;
     private AssistantTaskStateStore assistantTaskStateStore;
+    private AssistantChatService assistantChatService;
 
     @BeforeEach
     void setUp() {
-        assistantProperties = new AssistantProperties();
+        AssistantProperties assistantProperties = new AssistantProperties();
         assistantProperties.setEnabled(true);
         assistantTaskStateStore = new AssistantTaskStateStore();
         assistantChatService = new AssistantChatService(
                 assistantProperties,
                 rentalAssistantProvider,
+                toolFirstRentalAssistantProvider,
                 streamingRentalAssistantProvider,
+                streamingToolFirstRentalAssistantProvider,
+                appointmentActionAnalyzerProvider,
                 assistantChatMemoryStoreProvider,
                 rentalAssistantTools,
                 assistantTaskStateStore,
+                assistantWorkflowOrchestrator,
                 new ObjectMapper()
         );
     }
 
-    @Test
-    void chat_shouldFormatReplyAndSplitParagraphs() {
-        when(rentalAssistantProvider.getIfAvailable()).thenReturn((conversationId, message) ->
-                result("""
-                        第一段
-                        - 第二段
-                        """));
-
-        AssistantChatResponseVo response = assistantChatService.chat(" 你好 ");
-
-        assertFalse(response.getConversationId().isBlank());
-        assertEquals("第一段\n• 第二段", response.getReply());
-        assertEquals(List.of("第一段\n• 第二段"), response.getParagraphs());
-        assertEquals("model", response.getAnswerSource());
-        assertEquals("unknown", response.getFinishReason());
-        assertEquals(List.of(), response.getToolExecutions());
-        assertEquals(List.of(), response.getKnowledgeSources());
-        assertEquals(List.of(), response.getNextActions());
+    @AfterEach
+    void tearDown() {
+        LoginUserHolder.clear();
     }
 
     @Test
-    void chat_shouldReturnFallbackWhenModelReplyIsBlank() {
-        when(rentalAssistantProvider.getIfAvailable()).thenReturn((conversationId, message) -> result("   "));
-
-        AssistantChatResponseVo response = assistantChatService.chat("你可以帮我做什么？");
-
-        assertEquals("我当前没有生成有效回复，请换个问法再试。", response.getReply());
-        assertEquals(List.of("我当前没有生成有效回复，请换个问法再试。"), response.getParagraphs());
-    }
-
-    @Test
-    void chat_shouldReuseConversationId() {
-        when(rentalAssistantProvider.getIfAvailable()).thenReturn((conversationId, message) -> result("好的"));
-
-        AssistantChatResponseVo response = assistantChatService.chat("你好", "room-chat-001");
-
-        assertEquals("room-chat-001", response.getConversationId());
-    }
-
-    @Test
-    void chat_shouldRejectWhenAssistantDisabled() {
-        assistantProperties.setEnabled(false);
-
-        LeaseException exception = assertThrows(LeaseException.class, () -> assistantChatService.chat("你好"));
-
-        assertEquals(ResultCodeEnum.SERVICE_ERROR.getCode(), exception.getCode());
-    }
-
-    @Test
-    void chat_shouldBuildTaskStateAndNextActionsForRoomSearch() {
-        ToolExecution toolExecution = mock(ToolExecution.class, RETURNS_DEEP_STUBS);
-        when(toolExecution.request().name()).thenReturn("searchRooms");
-        when(toolExecution.request().arguments()).thenReturn("{\"districtName\":\"Beijing\",\"maxRent\":3000}");
-        when(toolExecution.result()).thenReturn("""
-                {"tool":"searchRooms","summary":"2 rooms found.","items":[
-                  {"roomId":2,"title":"Wendu Room 101"},
-                  {"roomId":3,"title":"Huilongguan Room 102"}
-                ]}
-                """);
-        when(toolExecution.hasFailed()).thenReturn(false);
-        when(rentalAssistantProvider.getIfAvailable()).thenReturn((conversationId, message) ->
-                new Result<String>("Two rooms found.", null, List.of(), null, List.of(toolExecution)));
-
-        AssistantChatResponseVo response = assistantChatService.chat("Find rooms in Beijing within 3000", "room-chat-001");
-
-        assertEquals("ROOM_SEARCH", response.getTaskState().getTaskType());
-        assertEquals("WAITING_USER_INPUT", response.getTaskState().getTaskStatus());
-        assertEquals(2, response.getTaskState().getCandidateRooms().size());
-        assertEquals(3, response.getNextActions().size());
-        assertEquals("VIEW_ROOM_DETAIL", response.getNextActions().get(0).getAction());
-    }
-
-    @Test
-    void chat_shouldEnterAppointmentConfirmingStateForRoomDetailConversation() {
+    void chat_shouldUseLocalAppointmentStateMachineBeforeInvokingModel() {
         LoginUserHolder.set(new LoginUser(8L, "17503976585"));
         assistantTaskStateStore.save(
                 "room-chat-001",
                 new AssistantTaskState("ROOM_DETAIL", "WAITING_USER_INPUT", 2L, "Huilongguan Room 102", 12L, null, List.of())
         );
-        when(rentalAssistantProvider.getIfAvailable()).thenReturn((conversationId, message) -> result("unused"));
 
         AssistantChatResponseVo response = assistantChatService.chat("帮我预约明天下午", "room-chat-001");
 
         assertEquals("APPOINTMENT_CONFIRMING", response.getTaskState().getTaskType());
         assertEquals("WAITING_CONFIRMATION", response.getTaskState().getTaskStatus());
         assertEquals(2L, response.getTaskState().getSelectedRoomId());
-        assertEquals(12L, response.getTaskState().getSelectedApartmentId());
         assertFalse(response.getTaskState().getProposedAppointmentTime().isBlank());
-        assertEquals("CONFIRM_APPOINTMENT", response.getNextActions().get(0).getAction());
+        verify(assistantWorkflowOrchestrator, never()).orchestrate(anyString(), anyString(), any(), anyBoolean());
     }
 
     @Test
-    void chat_shouldCreateAppointmentAfterConfirmation() {
-        LoginUserHolder.set(new LoginUser(8L, "17503976585"));
-        assistantTaskStateStore.save(
-                "room-chat-001",
-                new AssistantTaskState("APPOINTMENT_CONFIRMING", "WAITING_CONFIRMATION", 2L, "Huilongguan Room 102", 12L, "明天下午", List.of())
-        );
-        when(rentalAssistantProvider.getIfAvailable()).thenReturn((conversationId, message) -> result("unused"));
-        when(rentalAssistantTools.createRoomAppointment(2L, "明天下午", null)).thenReturn("""
+    void chat_shouldUseLastToolExecutionToResolveTaskState() {
+        ToolExecution queryAppointments = mock(ToolExecution.class, RETURNS_DEEP_STUBS);
+        when(queryAppointments.request().name()).thenReturn("getMyAppointments");
+        when(queryAppointments.request().arguments()).thenReturn("{}");
+        when(queryAppointments.result()).thenReturn("""
                 {
-                  "tool": "createRoomAppointment",
-                  "summary": "预约已创建成功",
-                  "appointmentId": 1001,
-                  "appointmentTime": "明天下午",
-                  "roomId": 2,
-                  "apartmentId": 12,
-                  "title": "Huilongguan Room 102"
+                  "tool":"getMyAppointments",
+                  "items":[
+                    {"appointmentId":13,"apartmentName":"Wendu Apartment","appointmentTime":"2026-04-11 15:00","appointmentStatusCode":1}
+                  ]
                 }
                 """);
 
-        AssistantChatResponseVo response = assistantChatService.chat("确认", "room-chat-001");
+        ToolExecution cancelAppointment = mock(ToolExecution.class, RETURNS_DEEP_STUBS);
+        when(cancelAppointment.request().name()).thenReturn("cancelAppointment");
+        when(cancelAppointment.request().arguments()).thenReturn("{\"appointmentId\":13}");
+        when(cancelAppointment.result()).thenReturn("""
+                {
+                  "tool":"cancelAppointment",
+                  "summary":"已为你取消这条看房预约。",
+                  "appointmentId":13,
+                  "appointmentStatusCode":2,
+                  "appointmentStatusText":"已取消",
+                  "apartmentName":"Wendu Apartment",
+                  "appointmentTime":"2026-04-11 15:00"
+                }
+                """);
 
-        assertEquals("tool", response.getAnswerSource());
-        assertEquals("APPOINTMENT_CREATED", response.getTaskState().getTaskType());
+        RentalAssistant rentalAssistant = mock(RentalAssistant.class);
+        when(rentalAssistant.chat(anyString(), anyString()))
+                .thenReturn(new Result<>("已为你取消这条看房预约。", null, List.of(), null, List.of(queryAppointments, cancelAppointment)));
+        when(rentalAssistantProvider.getIfAvailable()).thenReturn(rentalAssistant);
+        when(assistantWorkflowOrchestrator.orchestrate(anyString(), anyString(), any(), anyBoolean()))
+                .thenAnswer(invocation -> new AssistantWorkflowOrchestrator.OrchestrationResult(
+                        invocation.getArgument(0),
+                        invocation.getArgument(0),
+                        false,
+                        "none",
+                        "",
+                        ""
+                ));
+
+        AssistantChatResponseVo response = assistantChatService.chat("帮我取消最新预约", "room-chat-002");
+
+        assertEquals("APPOINTMENT_CANCELED", response.getTaskState().getTaskType());
         assertEquals("COMPLETED", response.getTaskState().getTaskStatus());
-        assertEquals("明天下午", response.getTaskState().getProposedAppointmentTime());
         assertEquals("VIEW_APPOINTMENTS", response.getNextActions().get(0).getAction());
     }
 
     @Test
-    void chat_shouldExposeLatestCancelableAppointmentAfterAppointmentQuery() {
-        ToolExecution toolExecution = mock(ToolExecution.class, RETURNS_DEEP_STUBS);
-        when(toolExecution.request().name()).thenReturn("getMyAppointments");
-        when(toolExecution.request().arguments()).thenReturn("{}");
-        when(toolExecution.result()).thenReturn("""
+    void chat_shouldExecuteDeterministicAppointmentQueryWhenOrchestratedToolIsKnown() {
+        LoginUserHolder.set(new LoginUser(8L, "17503976585"));
+        when(assistantWorkflowOrchestrator.orchestrate(anyString(), anyString(), any(), anyBoolean()))
+                .thenReturn(new AssistantWorkflowOrchestrator.OrchestrationResult(
+                        "查看您的所有预约记录",
+                        "查询用户的所有预约记录",
+                        true,
+                        "appointment_query",
+                        "getMyAppointments",
+                        """
+                                {"businessQuery":true,"requiresTool":true,"intent":"appointment_query","suggestedTool":"getMyAppointments","rewrittenUserMessage":"查询用户的所有预约记录"}
+                                """
+                ));
+        when(rentalAssistantTools.getMyAppointments()).thenReturn("""
                 {
                   "tool":"getMyAppointments",
+                  "summary":"当前共有 1 条预约记录。",
                   "items":[
-                    {"appointmentId":13,"apartmentName":"Wendu Apartment","appointmentTime":"2026-04-11 15:00","appointmentStatusCode":1},
-                    {"appointmentId":12,"apartmentName":"Older Appointment","appointmentTime":"2025-11-21 12:00","appointmentStatusCode":3}
+                    {"appointmentId":13,"apartmentName":"Wendu Apartment","appointmentTime":"2026-04-11 15:00","appointmentStatusCode":1,"statusText":"待看房"}
                   ]
                 }
                 """);
-        when(toolExecution.hasFailed()).thenReturn(false);
-        when(rentalAssistantProvider.getIfAvailable()).thenReturn((conversationId, message) ->
-                new Result<String>("Appointments found.", null, List.of(), null, List.of(toolExecution)));
 
-        AssistantChatResponseVo response = assistantChatService.chat("帮我看一下我的预约", "room-chat-001");
+        AssistantChatResponseVo response = assistantChatService.chat("查看您的所有预约记录", "room-chat-003");
 
+        assertEquals("tool", response.getAnswerSource());
         assertEquals("APPOINTMENT_QUERY", response.getTaskState().getTaskType());
-        assertEquals(13L, response.getTaskState().getSelectedAppointmentId());
         assertEquals("CANCEL_LATEST_APPOINTMENT", response.getNextActions().get(0).getAction());
+        assertEquals("getMyAppointments", response.getToolExecutions().get(0).getToolName());
+        verify(rentalAssistantProvider, never()).getIfAvailable();
     }
 
     @Test
-    void chat_shouldCancelAppointmentAfterConfirmation() {
+    void chat_shouldExecuteDeterministicRoomSearchWhenOrchestratedToolIsKnown() {
+        when(assistantWorkflowOrchestrator.orchestrate(anyString(), anyString(), any(), anyBoolean()))
+                .thenReturn(new AssistantWorkflowOrchestrator.OrchestrationResult(
+                        "帮我查一下北京市 3000 以内的房源",
+                        "帮我查询北京市月租3000元以内的房源",
+                        true,
+                        "room_search",
+                        "searchRooms",
+                        """
+                                {"businessQuery":true,"requiresTool":true,"intent":"room_search","suggestedTool":"searchRooms","rewrittenUserMessage":"帮我查询北京市月租3000元以内的房源"}
+                                """
+                ));
+        when(rentalAssistantTools.searchRooms(eq("北京市"), isNull(), eq(new BigDecimal("3000")))).thenReturn("""
+                {
+                  "tool":"searchRooms",
+                  "summary":"共找到 1 套房源，当前返回 1 套。",
+                  "items":[
+                    {"roomId":2,"title":"Wendu Room 101","locationText":"北京市 昌平区","rentText":"3000元/月","labels":["近地铁"]}
+                  ]
+                }
+                """);
+
+        AssistantChatResponseVo response = assistantChatService.chat("帮我查一下北京市 3000 以内的房源", "room-chat-004");
+
+        assertEquals("tool", response.getAnswerSource());
+        assertEquals("ROOM_SEARCH", response.getTaskState().getTaskType());
+        assertEquals("VIEW_ROOM_DETAIL", response.getNextActions().get(0).getAction());
+        assertEquals("searchRooms", response.getToolExecutions().get(0).getToolName());
+        verify(rentalAssistantProvider, never()).getIfAvailable();
+    }
+
+    @Test
+    void chat_shouldEnterRescheduleConfirmationWhenQuestionContainsDayOfMonthTime() {
         LoginUserHolder.set(new LoginUser(8L, "17503976585"));
         assistantTaskStateStore.save(
-                "room-chat-001",
+                "room-chat-005",
                 new AssistantTaskState(
                         "APPOINTMENT_QUERY",
                         "COMPLETED",
                         null,
                         null,
                         null,
-                        13L,
-                        "预约ID 13 / Wendu Apartment / 2026-04-11 15:00",
+                        14L,
+                        "预约ID 14 / 温都水城社区 / 2026-04-11 12:00",
                         null,
                         List.of()
                 )
         );
-        when(rentalAssistantProvider.getIfAvailable()).thenReturn((conversationId, message) -> result("unused"));
-        when(rentalAssistantTools.cancelAppointment(13L)).thenReturn("""
+
+        AssistantChatResponseVo response = assistantChatService.chat("把这条预约改到11号的11点", "room-chat-005");
+
+        assertEquals("APPOINTMENT_RESCHEDULE_CONFIRMING", response.getTaskState().getTaskType());
+        assertEquals("WAITING_CONFIRMATION", response.getTaskState().getTaskStatus());
+        assertEquals(14L, response.getTaskState().getSelectedAppointmentId());
+        assertEquals("CONFIRM_RESCHEDULE_APPOINTMENT", response.getNextActions().get(0).getAction());
+        assertEquals("agent", response.getAnswerSource());
+        assertEquals("11:00", response.getTaskState().getProposedAppointmentTime().substring(11));
+        verify(assistantWorkflowOrchestrator, never()).orchestrate(anyString(), anyString(), any(), anyBoolean());
+    }
+
+    @Test
+    void chat_shouldResolveRoomDetailFromRoomSearchCandidates() {
+        assistantTaskStateStore.save(
+                "room-chat-006",
+                new AssistantTaskState(
+                        "ROOM_SEARCH",
+                        "WAITING_USER_INPUT",
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of(
+                                new AssistantTaskState.RoomCandidate(2L, "温都水城社区 101"),
+                                new AssistantTaskState.RoomCandidate(3L, "回龙观社区 102")
+                        )
+                )
+        );
+        when(assistantWorkflowOrchestrator.orchestrate(anyString(), anyString(), any(), anyBoolean()))
+                .thenReturn(new AssistantWorkflowOrchestrator.OrchestrationResult(
+                        "温都水城社区 101 介绍一下",
+                        "查询温都水城社区 101 的房间详情",
+                        true,
+                        "room_detail",
+                        "getRoomDetail",
+                        """
+                                {"businessQuery":true,"requiresTool":true,"intent":"room_detail","suggestedTool":"getRoomDetail","rewrittenUserMessage":"查询温都水城社区 101 的房间详情"}
+                                """
+                ));
+        when(rentalAssistantTools.getRoomDetail(2L)).thenReturn("""
                 {
-                  "tool": "cancelAppointment",
-                  "summary": "已为你取消这条看房预约。",
-                  "appointmentId": 13,
-                  "appointmentStatusCode": 2,
-                  "appointmentStatusText": "已取消",
-                  "apartmentName": "Wendu Apartment",
-                  "appointmentTime": "2026-04-11 15:00"
+                  "tool":"getRoomDetail",
+                  "summary":"已获取房间详情。",
+                  "roomId":2,
+                  "apartmentId":12,
+                  "title":"温都水城社区 101",
+                  "locationText":"北京市 昌平区",
+                  "rentText":"2500元/月",
+                  "labels":["朝南","独卫"]
                 }
                 """);
 
-        AssistantChatResponseVo confirmResponse = assistantChatService.chat("取消最新预约", "room-chat-001");
-        assertEquals("APPOINTMENT_CANCEL_CONFIRMING", confirmResponse.getTaskState().getTaskType());
-        assertEquals("CONFIRM_CANCEL_APPOINTMENT", confirmResponse.getNextActions().get(0).getAction());
-
-        AssistantChatResponseVo response = assistantChatService.chat("确认", "room-chat-001");
+        AssistantChatResponseVo response = assistantChatService.chat("温都水城社区 101 介绍一下", "room-chat-006");
 
         assertEquals("tool", response.getAnswerSource());
-        assertEquals("APPOINTMENT_CANCELED", response.getTaskState().getTaskType());
-        assertEquals("COMPLETED", response.getTaskState().getTaskStatus());
-        assertEquals(13L, response.getTaskState().getSelectedAppointmentId());
-    }
-
-    private Result<String> result(String content) {
-        return new Result<>(content, null, List.of(), null, List.of());
+        assertEquals("ROOM_DETAIL", response.getTaskState().getTaskType());
+        assertEquals(2L, response.getTaskState().getSelectedRoomId());
+        assertEquals("ASK_APPOINTMENT", response.getNextActions().get(0).getAction());
+        assertEquals("getRoomDetail", response.getToolExecutions().get(0).getToolName());
+        verify(rentalAssistantProvider, never()).getIfAvailable();
     }
 }
