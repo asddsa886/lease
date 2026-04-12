@@ -5,9 +5,7 @@ import com.atguigu.lease.web.app.chat.rag.LocalKnowledgeContentRetriever;
 import com.atguigu.lease.web.app.chat.service.AppointmentActionAnalyzer;
 import com.atguigu.lease.web.app.chat.service.BusinessIntentAnalyzer;
 import com.atguigu.lease.web.app.chat.service.RentalAssistant;
-import com.atguigu.lease.web.app.chat.service.StreamingToolFirstRentalAssistant;
 import com.atguigu.lease.web.app.chat.service.StreamingRentalAssistant;
-import com.atguigu.lease.web.app.chat.service.ToolFirstRentalAssistant;
 import com.atguigu.lease.web.app.chat.tool.RentalAssistantTools;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.memory.chat.ChatMemoryProvider;
@@ -133,38 +131,6 @@ public class AssistantConfiguration {
         }
         if (assistantProperties.isRagEnabled()) {
             builder = builder.contentRetriever(assistantContentRetriever);
-        }
-        return builder.build();
-    }
-
-    @Bean
-    @ConditionalOnBean(ChatModel.class)
-    public ToolFirstRentalAssistant toolFirstRentalAssistant(ChatModel assistantChatModel,
-                                                             RentalAssistantTools rentalAssistantTools,
-                                                             ChatMemoryProvider assistantChatMemoryProvider,
-                                                             AssistantProperties assistantProperties) {
-        AiServices<ToolFirstRentalAssistant> builder = AiServices.builder(ToolFirstRentalAssistant.class)
-                .chatModel(assistantChatModel)
-                .tools(rentalAssistantTools);
-
-        if (assistantProperties.isMemoryEnabled()) {
-            builder = builder.chatMemoryProvider(assistantChatMemoryProvider);
-        }
-        return builder.build();
-    }
-
-    @Bean
-    @ConditionalOnBean(StreamingChatModel.class)
-    public StreamingToolFirstRentalAssistant streamingToolFirstRentalAssistant(StreamingChatModel assistantStreamingChatModel,
-                                                                               RentalAssistantTools rentalAssistantTools,
-                                                                               ChatMemoryProvider assistantChatMemoryProvider,
-                                                                               AssistantProperties assistantProperties) {
-        AiServices<StreamingToolFirstRentalAssistant> builder = AiServices.builder(StreamingToolFirstRentalAssistant.class)
-                .streamingChatModel(assistantStreamingChatModel)
-                .tools(rentalAssistantTools);
-
-        if (assistantProperties.isMemoryEnabled()) {
-            builder = builder.chatMemoryProvider(assistantChatMemoryProvider);
         }
         return builder.build();
     }

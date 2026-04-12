@@ -41,11 +41,7 @@ class AssistantChatServiceTest {
     @Mock
     private ObjectProvider<RentalAssistant> rentalAssistantProvider;
     @Mock
-    private ObjectProvider<ToolFirstRentalAssistant> toolFirstRentalAssistantProvider;
-    @Mock
     private ObjectProvider<StreamingRentalAssistant> streamingRentalAssistantProvider;
-    @Mock
-    private ObjectProvider<StreamingToolFirstRentalAssistant> streamingToolFirstRentalAssistantProvider;
     @Mock
     private ObjectProvider<AppointmentActionAnalyzer> appointmentActionAnalyzerProvider;
     @Mock
@@ -63,18 +59,25 @@ class AssistantChatServiceTest {
         AssistantProperties assistantProperties = new AssistantProperties();
         assistantProperties.setEnabled(true);
         assistantTaskStateStore = new AssistantTaskStateStore();
+        ObjectMapper objectMapper = new ObjectMapper();
+        AssistantConversationSupport conversationSupport = new AssistantConversationSupport(assistantTaskStateStore, objectMapper);
+        AssistantDeterministicToolExecutor deterministicToolExecutor = new AssistantDeterministicToolExecutor(
+                rentalAssistantTools,
+                assistantTaskStateStore,
+                conversationSupport,
+                objectMapper
+        );
         assistantChatService = new AssistantChatService(
                 assistantProperties,
                 rentalAssistantProvider,
-                toolFirstRentalAssistantProvider,
                 streamingRentalAssistantProvider,
-                streamingToolFirstRentalAssistantProvider,
                 appointmentActionAnalyzerProvider,
                 assistantChatMemoryStoreProvider,
                 rentalAssistantTools,
                 assistantTaskStateStore,
                 assistantWorkflowOrchestrator,
-                new ObjectMapper()
+                deterministicToolExecutor,
+                conversationSupport
         );
     }
 

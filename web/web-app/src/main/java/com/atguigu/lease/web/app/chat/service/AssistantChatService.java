@@ -9,17 +9,12 @@ import com.atguigu.lease.web.app.chat.agent.AssistantTaskStateStore;
 import com.atguigu.lease.web.app.chat.config.AssistantProperties;
 import com.atguigu.lease.web.app.chat.dto.AssistantChatResponseVo;
 import com.atguigu.lease.web.app.chat.dto.AssistantKnowledgeSourceVo;
-import com.atguigu.lease.web.app.chat.dto.AssistantNextActionVo;
-import com.atguigu.lease.web.app.chat.dto.AssistantRoomCandidateVo;
-import com.atguigu.lease.web.app.chat.dto.AssistantTaskStateVo;
 import com.atguigu.lease.web.app.chat.dto.AssistantToolExecutionVo;
 import com.atguigu.lease.web.app.chat.memory.AssistantMongoChatMemoryStore;
 import com.atguigu.lease.web.app.chat.tool.RentalAssistantTools;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.chat.response.ChatResponse;
-import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.service.Result;
 import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.service.tool.ToolExecution;
@@ -38,8 +33,6 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.ZoneId;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -57,14 +50,8 @@ public class AssistantChatService {
 
     private static final String DEFAULT_EMPTY_REPLY = "我当前没有生成有效回复，请换个问法再试。";
     private static final int STREAM_CHUNK_SIZE = 24;
-    private static final int KNOWLEDGE_PREVIEW_LIMIT = 180;
     private static final ZoneId ZONE_ID = ZoneId.systemDefault();
     private static final Pattern APPOINTMENT_ID_PATTERN = Pattern.compile("(?:预约(?:ID|id)?\\s*|ID\\s*|id\\s*)(\\d+)");
-    private static final Pattern REGION_PATTERN = Pattern.compile("([\\u4e00-\\u9fa5]{2,12}(?:市|区|县|旗|州|省))");
-    private static final Pattern RENT_RANGE_PATTERN = Pattern.compile("(\\d{3,6})(?:\\s*元|块)?\\s*(?:到|-|~|～)\\s*(\\d{3,6})");
-    private static final Pattern MAX_RENT_PATTERN = Pattern.compile("(\\d{3,6})(?:\\s*元|块)?\\s*(?:以内|以下|之内|左右|封顶)");
-    private static final Pattern MIN_RENT_PATTERN = Pattern.compile("(\\d{3,6})(?:\\s*元|块)?\\s*(?:以上|起|及以上)");
-    private static final Pattern ROOM_INDEX_PATTERN = Pattern.compile("第\\s*([1-9]\\d*)\\s*(?:个|套|间)?");
     private static final List<String> TOOL_HEAVY_HINTS = List.of(
             "房源", "房间", "房号", "公寓", "小区", "预约", "租约", "租房",
             "月租", "租金", "朝阳", "海淀", "昌平", "通州", "北京市", "押一付三",
@@ -73,15 +60,14 @@ public class AssistantChatService {
 
     private final AssistantProperties assistantProperties;
     private final ObjectProvider<RentalAssistant> rentalAssistantProvider;
-    private final ObjectProvider<ToolFirstRentalAssistant> toolFirstRentalAssistantProvider;
     private final ObjectProvider<StreamingRentalAssistant> streamingRentalAssistantProvider;
-    private final ObjectProvider<StreamingToolFirstRentalAssistant> streamingToolFirstRentalAssistantProvider;
     private final ObjectProvider<AppointmentActionAnalyzer> appointmentActionAnalyzerProvider;
     private final ObjectProvider<AssistantMongoChatMemoryStore> assistantChatMemoryStoreProvider;
     private final RentalAssistantTools rentalAssistantTools;
     private final AssistantTaskStateStore assistantTaskStateStore;
     private final AssistantWorkflowOrchestrator assistantWorkflowOrchestrator;
-    private final ObjectMapper objectMapper;
+    private final AssistantDeterministicToolExecutor deterministicToolExecutor;
+    private final AssistantConversationSupport conversationSupport;
 
     public AssistantChatResponseVo chat(String message) {
         return chat(message, null);
@@ -97,16 +83,16 @@ public class AssistantChatService {
             return localAgentResponse;
         }
         AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult = orchestrateQuestion(question, resolvedConversationId);
-        AssistantChatResponseVo deterministicToolResponse = handleDeterministicOrchestratedTool(resolvedConversationId, orchestrationResult);
+        AssistantChatResponseVo deterministicToolResponse = deterministicToolExecutor.execute(resolvedConversationId, orchestrationResult);
         if (deterministicToolResponse != null) {
             logAssistantSuccess(question, deterministicToolResponse);
             return deterministicToolResponse;
         }
-        RentalAssistant rentalAssistant = selectAssistant(orchestrationResult);
+        RentalAssistant rentalAssistant = requireAssistant();
 
         try {
             Result<String> assistantResult = invokeAssistantWithRecovery(rentalAssistant, resolvedConversationId, orchestrationResult);
-            AssistantChatResponseVo response = buildResponse(resolvedConversationId, assistantResult, orchestrationResult);
+            AssistantChatResponseVo response = conversationSupport.buildAssistantResponse(resolvedConversationId, assistantResult);
             logAssistantSuccess(question, response);
             return response;
         } catch (LeaseException e) {
@@ -156,7 +142,7 @@ public class AssistantChatService {
         }
 
         AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult = orchestrateQuestion(question, resolvedConversationId);
-        AssistantChatResponseVo deterministicToolResponse = handleDeterministicOrchestratedTool(resolvedConversationId, orchestrationResult);
+        AssistantChatResponseVo deterministicToolResponse = deterministicToolExecutor.execute(resolvedConversationId, orchestrationResult);
         if (deterministicToolResponse != null) {
             sendEvent(emitter, "start", Map.of(
                     "message", "开始生成回复",
@@ -181,7 +167,7 @@ public class AssistantChatService {
         ));
 
         if (nativeStreaming) {
-            StreamingRentalAssistant streamingAssistant = selectStreamingAssistant(orchestrationResult);
+            StreamingRentalAssistant streamingAssistant = streamingRentalAssistantProvider.getIfAvailable();
             runAsyncWithLoginContext(currentLoginUser, currentAuthentication, () -> startNativeStream(
                     emitter,
                     resolvedConversationId,
@@ -189,7 +175,7 @@ public class AssistantChatService {
                     streamingAssistant
             ));
         } else {
-            RentalAssistant rentalAssistant = selectAssistant(orchestrationResult);
+            RentalAssistant rentalAssistant = requireAssistant();
             runAsyncWithLoginContext(currentLoginUser, currentAuthentication, () -> startSyntheticStream(
                     emitter,
                     resolvedConversationId,
@@ -220,473 +206,6 @@ public class AssistantChatService {
         return result;
     }
 
-    private AssistantChatResponseVo handleDeterministicOrchestratedTool(String conversationId,
-                                                                        AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult) {
-        if (!requiresToolExecution(orchestrationResult)) {
-            return null;
-        }
-
-        String suggestedTool = blankToEmpty(orchestrationResult.suggestedTool());
-        return switch (suggestedTool) {
-            case "getMyAppointments" -> executeDeterministicMyAppointmentsQuery(conversationId);
-            case "getMyLeaseAgreements" -> executeDeterministicLeaseQuery(conversationId);
-            case "searchRooms" -> executeDeterministicRoomSearch(conversationId, orchestrationResult);
-            case "getRoomDetail" -> executeDeterministicRoomDetail(conversationId, orchestrationResult);
-            case "getRoomDetailByKeyword" -> executeDeterministicRoomDetailByKeyword(conversationId, orchestrationResult);
-            default -> null;
-        };
-    }
-
-    private AssistantChatResponseVo executeDeterministicMyAppointmentsQuery(String conversationId) {
-        if (!isLoggedIn()) {
-            AssistantTaskState nextState = new AssistantTaskState("APPOINTMENT_QUERY", "NEEDS_LOGIN", null, null, null, null, List.of());
-            assistantTaskStateStore.save(conversationId, nextState);
-            return buildLocalResponse(
-                    conversationId,
-                    "当前你还没有登录，暂时不能查询预约记录。请先登录后再试。",
-                    "agent",
-                    List.of(),
-                    List.of(),
-                    nextState
-            );
-        }
-        return buildDeterministicToolResponse(conversationId, "getMyAppointments", Map.of(), rentalAssistantTools.getMyAppointments());
-    }
-
-    private AssistantChatResponseVo executeDeterministicLeaseQuery(String conversationId) {
-        if (!isLoggedIn()) {
-            AssistantTaskState nextState = new AssistantTaskState("LEASE_QUERY", "NEEDS_LOGIN", null, null, null, null, List.of());
-            assistantTaskStateStore.save(conversationId, nextState);
-            return buildLocalResponse(
-                    conversationId,
-                    "当前你还没有登录，暂时不能查询租约记录。请先登录后再试。",
-                    "agent",
-                    List.of(),
-                    List.of(),
-                    nextState
-            );
-        }
-        return buildDeterministicToolResponse(conversationId, "getMyLeaseAgreements", Map.of(), rentalAssistantTools.getMyLeaseAgreements());
-    }
-
-    private AssistantChatResponseVo executeDeterministicRoomSearch(String conversationId,
-                                                                   AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult) {
-        RoomSearchCriteria criteria = extractRoomSearchCriteria(orchestrationResult);
-        LinkedHashMap<String, Object> toolArguments = new LinkedHashMap<>();
-        toolArguments.put("districtName", criteria.regionKeyword());
-        toolArguments.put("minRent", criteria.minRent());
-        toolArguments.put("maxRent", criteria.maxRent());
-        return buildDeterministicToolResponse(
-                conversationId,
-                "searchRooms",
-                toolArguments,
-                rentalAssistantTools.searchRooms(criteria.regionKeyword(), criteria.minRent(), criteria.maxRent())
-        );
-    }
-
-    private AssistantChatResponseVo executeDeterministicRoomDetail(String conversationId,
-                                                                   AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult) {
-        AssistantTaskState currentState = assistantTaskStateStore.get(conversationId);
-        if (currentState == null || currentState.selectedRoomId() == null) {
-            AssistantTaskState.RoomCandidate candidate = resolveRoomCandidateForDetailQuestion(
-                    extractOriginalQuestion(orchestrationResult),
-                    currentState
-            );
-            if (candidate != null && candidate.roomId() != null) {
-                return buildDeterministicToolResponse(
-                        conversationId,
-                        "getRoomDetail",
-                        Map.of("roomId", candidate.roomId()),
-                        rentalAssistantTools.getRoomDetail(candidate.roomId())
-                );
-            }
-            return executeDeterministicRoomDetailByKeyword(conversationId, orchestrationResult);
-        }
-        return buildDeterministicToolResponse(
-                conversationId,
-                "getRoomDetail",
-                Map.of("roomId", currentState.selectedRoomId()),
-                rentalAssistantTools.getRoomDetail(currentState.selectedRoomId())
-        );
-    }
-
-    private AssistantChatResponseVo executeDeterministicRoomDetailByKeyword(String conversationId,
-                                                                            AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult) {
-        String roomKeyword = extractRewrittenUserMessage(orchestrationResult);
-        if (!StringUtils.hasText(roomKeyword)) {
-            roomKeyword = extractOriginalQuestion(orchestrationResult);
-        }
-        if (!StringUtils.hasText(roomKeyword)) {
-            return null;
-        }
-        return buildDeterministicToolResponse(
-                conversationId,
-                "getRoomDetailByKeyword",
-                Map.of("roomKeyword", roomKeyword),
-                rentalAssistantTools.getRoomDetailByKeyword(roomKeyword)
-        );
-    }
-
-    private AssistantChatResponseVo buildDeterministicToolResponse(String conversationId,
-                                                                   String toolName,
-                                                                   Map<String, Object> toolArguments,
-                                                                   String toolResult) {
-        JsonNode resultNode = parseToolResult(toolResult);
-        AssistantTaskState previousState = assistantTaskStateStore.get(conversationId);
-        AssistantTaskState nextState = buildTaskStateFromToolResult(toolName, resultNode, previousState);
-        if (nextState != null) {
-            assistantTaskStateStore.save(conversationId, nextState);
-        }
-        AssistantTaskState responseState = nextState == null ? previousState : nextState;
-
-        AssistantToolExecutionVo toolExecution = new AssistantToolExecutionVo(
-                toolName,
-                toToolArgumentsJson(toolArguments),
-                false,
-                summarizeToolResult(toolResult)
-        );
-        return buildLocalResponse(
-                conversationId,
-                buildDeterministicToolReply(toolName, resultNode),
-                "tool",
-                List.of(toolExecution),
-                List.of(),
-                responseState
-        );
-    }
-
-    private String buildDeterministicToolReply(String toolName, JsonNode resultNode) {
-        return switch (toolName) {
-            case "getMyAppointments" -> buildAppointmentQueryReply(resultNode);
-            case "getMyLeaseAgreements" -> buildLeaseQueryReply(resultNode);
-            case "searchRooms" -> buildRoomSearchReply(resultNode);
-            case "getRoomDetail", "getRoomDetailByKeyword" -> buildRoomDetailReply(resultNode);
-            default -> StringUtils.hasText(getTextValue(resultNode, "summary"))
-                    ? getTextValue(resultNode, "summary")
-                    : DEFAULT_EMPTY_REPLY;
-        };
-    }
-
-    private String buildAppointmentQueryReply(JsonNode resultNode) {
-        String summary = getTextValue(resultNode, "summary");
-        JsonNode itemsNode = resultNode == null ? null : resultNode.path("items");
-        if (itemsNode == null || !itemsNode.isArray() || itemsNode.isEmpty()) {
-            return StringUtils.hasText(summary) ? summary : "当前没有预约记录。";
-        }
-
-        List<String> lines = new ArrayList<>();
-        lines.add(StringUtils.hasText(summary) ? summary : "已为你查到预约记录。");
-        int limit = Math.min(itemsNode.size(), 5);
-        for (int i = 0; i < limit; i++) {
-            JsonNode itemNode = itemsNode.get(i);
-            String itemText = buildAppointmentLabel(
-                    getLongValue(itemNode, "appointmentId"),
-                    getTextValue(itemNode, "apartmentName"),
-                    getTextValue(itemNode, "appointmentTime")
-            );
-            String statusText = getTextValue(itemNode, "statusText");
-            lines.add((i + 1) + ". " + (StringUtils.hasText(statusText) ? itemText + " / " + statusText : itemText));
-        }
-        if (itemsNode.size() > limit) {
-            lines.add("还有 " + (itemsNode.size() - limit) + " 条记录未展开。");
-        }
-        return String.join("\n", lines);
-    }
-
-    private String buildLeaseQueryReply(JsonNode resultNode) {
-        String summary = getTextValue(resultNode, "summary");
-        JsonNode itemsNode = resultNode == null ? null : resultNode.path("items");
-        if (itemsNode == null || !itemsNode.isArray() || itemsNode.isEmpty()) {
-            return StringUtils.hasText(summary) ? summary : "当前没有租约记录。";
-        }
-
-        List<String> lines = new ArrayList<>();
-        lines.add(StringUtils.hasText(summary) ? summary : "已为你查到租约记录。");
-        int limit = Math.min(itemsNode.size(), 5);
-        for (int i = 0; i < limit; i++) {
-            JsonNode itemNode = itemsNode.get(i);
-            List<String> parts = new ArrayList<>();
-            appendIfPresent(parts, getTextValue(itemNode, "apartmentName"));
-            appendIfPresent(parts, getTextValue(itemNode, "roomNumber"));
-            appendIfPresent(parts, getTextValue(itemNode, "rentText"));
-            appendIfPresent(parts, getTextValue(itemNode, "leaseStatusText"));
-            appendIfPresent(parts, getTextValue(itemNode, "leasePeriod"));
-            lines.add((i + 1) + ". " + (parts.isEmpty() ? "租约信息待确认" : String.join(" / ", parts)));
-        }
-        if (itemsNode.size() > limit) {
-            lines.add("还有 " + (itemsNode.size() - limit) + " 条记录未展开。");
-        }
-        return String.join("\n", lines);
-    }
-
-    private String buildRoomSearchReply(JsonNode resultNode) {
-        String summary = getTextValue(resultNode, "summary");
-        JsonNode itemsNode = resultNode == null ? null : resultNode.path("items");
-        if (itemsNode == null || !itemsNode.isArray() || itemsNode.isEmpty()) {
-            return StringUtils.hasText(summary) ? summary : "没有查到符合条件的房源。";
-        }
-
-        List<String> lines = new ArrayList<>();
-        lines.add(StringUtils.hasText(summary) ? summary : "已为你查到符合条件的房源。");
-        int limit = Math.min(itemsNode.size(), 5);
-        for (int i = 0; i < limit; i++) {
-            JsonNode itemNode = itemsNode.get(i);
-            List<String> parts = new ArrayList<>();
-            appendIfPresent(parts, getTextValue(itemNode, "title"));
-            appendIfPresent(parts, getTextValue(itemNode, "rentText"));
-            appendIfPresent(parts, getTextValue(itemNode, "locationText"));
-            String labels = joinTextArray(itemNode == null ? null : itemNode.path("labels"));
-            appendIfPresent(parts, StringUtils.hasText(labels) ? "标签：" + labels : null);
-            lines.add((i + 1) + ". " + (parts.isEmpty() ? "房源信息待确认" : String.join(" / ", parts)));
-        }
-        if (itemsNode.size() > limit) {
-            lines.add("还有 " + (itemsNode.size() - limit) + " 套房源未展开。");
-        }
-        return String.join("\n", lines);
-    }
-
-    private String buildRoomDetailReply(JsonNode resultNode) {
-        String summary = getTextValue(resultNode, "summary");
-        if (resultNode == null || resultNode.isMissingNode()) {
-            return StringUtils.hasText(summary) ? summary : "没有查到对应房间。";
-        }
-
-        List<String> lines = new ArrayList<>();
-        lines.add(StringUtils.hasText(summary) ? summary : "已为你查到房间详情。");
-        appendDetailLine(lines, "房间", getTextValue(resultNode, "title"));
-        appendDetailLine(lines, "租金", getTextValue(resultNode, "rentText"));
-        appendDetailLine(lines, "位置", getTextValue(resultNode, "locationText"));
-        String labels = joinTextArray(resultNode.path("labels"));
-        appendDetailLine(lines, "标签", labels);
-        String paymentTypes = joinTextArray(resultNode.path("paymentTypes"));
-        appendDetailLine(lines, "付款方式", paymentTypes);
-        String leaseTerms = joinTextArray(resultNode.path("leaseTerms"));
-        appendDetailLine(lines, "可选租期", leaseTerms);
-        return String.join("\n", lines);
-    }
-
-    private void appendDetailLine(List<String> lines, String label, String value) {
-        if (StringUtils.hasText(value)) {
-            lines.add("- " + label + "：" + value);
-        }
-    }
-
-    private void appendIfPresent(List<String> values, String value) {
-        if (StringUtils.hasText(value)) {
-            values.add(value.trim());
-        }
-    }
-
-    private String joinTextArray(JsonNode arrayNode) {
-        if (arrayNode == null || !arrayNode.isArray() || arrayNode.isEmpty()) {
-            return null;
-        }
-        List<String> values = new ArrayList<>();
-        for (JsonNode node : arrayNode) {
-            if (node == null) {
-                continue;
-            }
-            String value = node.asText(null);
-            if (StringUtils.hasText(value)) {
-                values.add(value.trim());
-            }
-        }
-        return values.isEmpty() ? null : String.join("、", values);
-    }
-
-    private String toToolArgumentsJson(Map<String, Object> toolArguments) {
-        try {
-            return objectMapper.writeValueAsString(toolArguments == null ? Map.of() : toolArguments);
-        } catch (Exception e) {
-            return String.valueOf(toolArguments);
-        }
-    }
-
-    private RoomSearchCriteria extractRoomSearchCriteria(AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult) {
-        String searchText = extractRewrittenUserMessage(orchestrationResult);
-        if (!StringUtils.hasText(searchText)) {
-            searchText = extractOriginalQuestion(orchestrationResult);
-        }
-        String normalized = normalizeSearchText(searchText);
-
-        BigDecimal minRent = null;
-        BigDecimal maxRent = null;
-        Matcher rangeMatcher = RENT_RANGE_PATTERN.matcher(normalized);
-        if (rangeMatcher.find()) {
-            minRent = parseBigDecimal(rangeMatcher.group(1));
-            maxRent = parseBigDecimal(rangeMatcher.group(2));
-        } else {
-            Matcher maxMatcher = MAX_RENT_PATTERN.matcher(normalized);
-            if (maxMatcher.find()) {
-                maxRent = parseBigDecimal(maxMatcher.group(1));
-            }
-            Matcher minMatcher = MIN_RENT_PATTERN.matcher(normalized);
-            if (minMatcher.find()) {
-                minRent = parseBigDecimal(minMatcher.group(1));
-            }
-        }
-
-        return new RoomSearchCriteria(extractRegionKeyword(normalized), minRent, maxRent);
-    }
-
-    private String normalizeSearchText(String searchText) {
-        String normalized = blankToEmpty(searchText)
-                .replace('，', ' ')
-                .replace(',', ' ')
-                .trim();
-        return normalized
-                .replaceFirst("^(帮我|麻烦|请|我想|想|我要)?(查一下|查一查|查查|查询一下|查询|搜索一下|搜索|搜一下|搜|找一下|找找)?", "")
-                .trim();
-    }
-
-    private BigDecimal parseBigDecimal(String value) {
-        if (!StringUtils.hasText(value)) {
-            return null;
-        }
-        try {
-            return new BigDecimal(value.trim());
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private String extractRegionKeyword(String question) {
-        if (!StringUtils.hasText(question)) {
-            return null;
-        }
-
-        Matcher matcher = REGION_PATTERN.matcher(question);
-        while (matcher.find()) {
-            String candidate = matcher.group(1);
-            if (!StringUtils.hasText(candidate)) {
-                continue;
-            }
-            String normalized = candidate.trim();
-            if (normalized.contains("房源")
-                    || normalized.contains("预约")
-                    || normalized.contains("租约")
-                    || normalized.contains("记录")) {
-                continue;
-            }
-            return normalized;
-        }
-
-        if (question.contains("北京")) {
-            return "北京市";
-        }
-        if (question.contains("上海")) {
-            return "上海市";
-        }
-        if (question.contains("广州")) {
-            return "广州市";
-        }
-        if (question.contains("深圳")) {
-            return "深圳市";
-        }
-        return null;
-    }
-
-    private AssistantTaskState.RoomCandidate resolveRoomCandidateForDetailQuestion(String question,
-                                                                                   AssistantTaskState currentState) {
-        if (currentState == null || currentState.candidateRooms() == null || currentState.candidateRooms().isEmpty()) {
-            return null;
-        }
-
-        Integer candidateIndex = extractRoomCandidateIndex(question);
-        if (candidateIndex != null && candidateIndex > 0 && candidateIndex <= currentState.candidateRooms().size()) {
-            return currentState.candidateRooms().get(candidateIndex - 1);
-        }
-
-        String normalizedQuestion = normalizeRoomReference(question);
-        if (!StringUtils.hasText(normalizedQuestion)) {
-            return null;
-        }
-
-        AssistantTaskState.RoomCandidate bestMatch = null;
-        int bestScore = 0;
-        for (AssistantTaskState.RoomCandidate candidate : currentState.candidateRooms()) {
-            String normalizedTitle = normalizeRoomReference(candidate.title());
-            if (!StringUtils.hasText(normalizedTitle)) {
-                continue;
-            }
-            int score = scoreRoomCandidate(normalizedQuestion, normalizedTitle);
-            if (score > bestScore) {
-                bestScore = score;
-                bestMatch = candidate;
-            }
-        }
-        return bestScore > 0 ? bestMatch : null;
-    }
-
-    private Integer extractRoomCandidateIndex(String question) {
-        if (!StringUtils.hasText(question)) {
-            return null;
-        }
-        Matcher matcher = ROOM_INDEX_PATTERN.matcher(question);
-        if (!matcher.find()) {
-            return null;
-        }
-        try {
-            return Integer.parseInt(matcher.group(1));
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private int scoreRoomCandidate(String normalizedQuestion, String normalizedTitle) {
-        if (normalizedQuestion.contains(normalizedTitle)) {
-            return normalizedTitle.length() + 10;
-        }
-        if (normalizedTitle.contains(normalizedQuestion)) {
-            return normalizedQuestion.length();
-        }
-        String questionDigits = extractDigits(normalizedQuestion);
-        String titleDigits = extractDigits(normalizedTitle);
-        if (StringUtils.hasText(questionDigits) && questionDigits.equals(titleDigits)) {
-            return 5;
-        }
-        return 0;
-    }
-
-    private String normalizeRoomReference(String value) {
-        if (!StringUtils.hasText(value)) {
-            return "";
-        }
-        return value.trim()
-                .replace("介绍介绍", "")
-                .replace("介绍一下", "")
-                .replace("介绍", "")
-                .replace("详情", "")
-                .replace("看一下", "")
-                .replace("看下", "")
-                .replace("看看", "")
-                .replace("这个房源", "")
-                .replace("这个", "")
-                .replace("房源", "")
-                .replace("房间", "")
-                .replaceAll("\\s+", "")
-                .toLowerCase(Locale.ROOT);
-    }
-
-    private String extractDigits(String value) {
-        if (!StringUtils.hasText(value)) {
-            return "";
-        }
-        StringBuilder digits = new StringBuilder();
-        for (int i = 0; i < value.length(); i++) {
-            char ch = value.charAt(i);
-            if (Character.isDigit(ch)) {
-                digits.append(ch);
-            }
-        }
-        return digits.toString();
-    }
-
-    private String extractRewrittenUserMessage(AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult) {
-        JsonNode rawDecisionNode = parseToolResult(orchestrationResult == null ? null : orchestrationResult.rawDecision());
-        return getTextValue(rawDecisionNode, "rewrittenUserMessage");
-    }
-
     private void ensureAssistantEnabled() {
         if (!assistantProperties.isEnabled()) {
             throw new LeaseException(ResultCodeEnum.SERVICE_ERROR.getCode(), "智能助手未启用");
@@ -703,35 +222,13 @@ public class AssistantChatService {
         return rentalAssistant;
     }
 
-    private RentalAssistant selectAssistant(AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult) {
-        if (requiresToolExecution(orchestrationResult)) {
-            ToolFirstRentalAssistant toolFirstAssistant = toolFirstRentalAssistantProvider.getIfAvailable();
-            if (toolFirstAssistant != null) {
-                return toolFirstAssistant::chat;
-            }
-            log.warn("Tool-first assistant unavailable, falling back to default assistant");
-        }
-        return requireAssistant();
-    }
-
-    private StreamingRentalAssistant selectStreamingAssistant(AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult) {
-        if (requiresToolExecution(orchestrationResult)) {
-            StreamingToolFirstRentalAssistant toolFirstAssistant = streamingToolFirstRentalAssistantProvider.getIfAvailable();
-            if (toolFirstAssistant != null) {
-                return toolFirstAssistant::chat;
-            }
-            log.warn("Streaming tool-first assistant unavailable, falling back to default streaming assistant");
-        }
-        return streamingRentalAssistantProvider.getIfAvailable();
-    }
-
     private void startSyntheticStream(SseEmitter emitter,
                                       String conversationId,
                                       AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult,
                                       RentalAssistant rentalAssistant) {
         try {
             Result<String> assistantResult = invokeAssistantWithRecovery(rentalAssistant, conversationId, orchestrationResult);
-            AssistantChatResponseVo response = buildResponse(conversationId, assistantResult, orchestrationResult);
+            AssistantChatResponseVo response = conversationSupport.buildAssistantResponse(conversationId, assistantResult);
             emitSyntheticResponse(emitter, extractOriginalQuestion(orchestrationResult), response);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -756,7 +253,7 @@ public class AssistantChatService {
             TimeUnit.MILLISECONDS.sleep(18);
         }
 
-        sendEvent(emitter, "complete", buildCompletePayload(response));
+        sendEvent(emitter, "complete", conversationSupport.buildCompletePayload(response));
         emitter.complete();
         logAssistantSuccess(question, response);
     }
@@ -853,22 +350,22 @@ public class AssistantChatService {
 
         enforceToolExecutionIfRequired(orchestrationResult, toolExecutions);
 
-        String formattedReply = formatReply(reply);
-        AssistantTaskState taskState = resolveTaskState(conversationId, rawToolExecutions, false);
+        String formattedReply = conversationSupport.formatReply(reply);
+        AssistantTaskState taskState = conversationSupport.resolveTaskState(conversationId, rawToolExecutions, false);
         AssistantChatResponseVo response = new AssistantChatResponseVo(
                 conversationId,
                 formattedReply,
-                splitParagraphs(formattedReply),
-                resolveAnswerSource(toolExecutions, List.of()),
+                conversationSupport.splitParagraphs(formattedReply),
+                conversationSupport.resolveAnswerSource(toolExecutions, List.of()),
                 chatResponse == null || chatResponse.finishReason() == null
                         ? "unknown"
                         : chatResponse.finishReason().name().toLowerCase(Locale.ROOT),
                 List.copyOf(toolExecutions),
                 List.of(),
-                toTaskStateVo(taskState),
-                buildNextActions(taskState)
+                conversationSupport.toTaskStateVo(taskState),
+                conversationSupport.buildNextActions(taskState)
         );
-        sendEvent(emitter, "complete", buildCompletePayload(response));
+        sendEvent(emitter, "complete", conversationSupport.buildCompletePayload(response));
         emitter.complete();
         logAssistantSuccess(extractOriginalQuestion(orchestrationResult), response);
     }
@@ -1777,17 +1274,13 @@ public class AssistantChatService {
                                                        List<AssistantToolExecutionVo> toolExecutions,
                                                        List<AssistantKnowledgeSourceVo> knowledgeSources,
                                                        AssistantTaskState taskState) {
-        String formattedReply = formatReply(reply);
-        return new AssistantChatResponseVo(
+        return conversationSupport.buildLocalResponse(
                 conversationId,
-                formattedReply,
-                splitParagraphs(formattedReply),
+                reply,
                 answerSource,
-                "agent",
                 toolExecutions,
                 knowledgeSources,
-                toTaskStateVo(taskState),
-                buildNextActions(taskState)
+                taskState
         );
     }
 
@@ -2038,9 +1531,7 @@ public class AssistantChatService {
     }
 
     private List<AssistantTaskState.RoomCandidate> safeCandidateRooms(AssistantTaskState currentState) {
-        return currentState == null || currentState.candidateRooms() == null
-                ? List.of()
-                : currentState.candidateRooms();
+        return conversationSupport.safeCandidateRooms(currentState);
     }
 
     private Result<String> invokeAssistantWithRecovery(RentalAssistant rentalAssistant,
@@ -2062,28 +1553,6 @@ public class AssistantChatService {
         }
     }
 
-    private AssistantChatResponseVo buildResponse(String conversationId,
-                                                 Result<String> assistantResult,
-                                                 AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult) {
-        String formattedReply = formatReply(assistantResult == null ? null : assistantResult.content());
-        List<String> paragraphs = splitParagraphs(formattedReply);
-        List<AssistantToolExecutionVo> toolExecutions = buildToolExecutions(assistantResult);
-        List<AssistantKnowledgeSourceVo> knowledgeSources = buildKnowledgeSources(assistantResult);
-        AssistantTaskState taskState = resolveTaskState(conversationId, assistantResult);
-        List<AssistantNextActionVo> nextActions = buildNextActions(taskState);
-
-        return new AssistantChatResponseVo(
-                conversationId,
-                formattedReply,
-                paragraphs,
-                resolveAnswerSource(toolExecutions, knowledgeSources),
-                resolveFinishReason(assistantResult),
-                toolExecutions,
-                knowledgeSources,
-                toTaskStateVo(taskState),
-                nextActions
-        );
-    }
 
     private void enforceToolExecutionIfRequired(AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult,
                                                 Result<String> assistantResult) {
@@ -2135,15 +1604,6 @@ public class AssistantChatService {
         return blankToEmpty(orchestrationResult.question());
     }
 
-    private List<AssistantToolExecutionVo> buildToolExecutions(Result<String> assistantResult) {
-        if (assistantResult == null || assistantResult.toolExecutions() == null || assistantResult.toolExecutions().isEmpty()) {
-            return List.of();
-        }
-
-        return assistantResult.toolExecutions().stream()
-                .map(this::toToolExecutionVo)
-                .toList();
-    }
 
     private AssistantToolExecutionVo toToolExecutionVo(ToolExecution toolExecution) {
         String toolName = toolExecution == null || toolExecution.request() == null
@@ -2153,457 +1613,21 @@ public class AssistantChatService {
                 ? null
                 : toolExecution.request().arguments();
         boolean failed = toolExecution != null && toolExecution.hasFailed();
-        String resultSummary = summarizeToolResult(toolExecution == null ? null : toolExecution.result());
+        String resultSummary = conversationSupport.summarizeToolResult(toolExecution == null ? null : toolExecution.result());
         return new AssistantToolExecutionVo(toolName, arguments, failed, resultSummary);
     }
 
-    private List<AssistantKnowledgeSourceVo> buildKnowledgeSources(Result<String> assistantResult) {
-        if (assistantResult == null || assistantResult.sources() == null || assistantResult.sources().isEmpty()) {
-            return List.of();
-        }
-
-        List<AssistantKnowledgeSourceVo> sources = new ArrayList<>();
-        for (Content source : assistantResult.sources()) {
-            if (source == null || source.textSegment() == null || !StringUtils.hasText(source.textSegment().text())) {
-                continue;
-            }
-            String preview = source.textSegment().text().replace("\r\n", "\n").replace('\r', '\n').trim();
-            if (preview.length() > KNOWLEDGE_PREVIEW_LIMIT) {
-                preview = preview.substring(0, KNOWLEDGE_PREVIEW_LIMIT) + "...";
-            }
-            sources.add(new AssistantKnowledgeSourceVo(preview));
-        }
-        return sources;
-    }
-
-    private String resolveAnswerSource(List<AssistantToolExecutionVo> toolExecutions,
-                                       List<AssistantKnowledgeSourceVo> knowledgeSources) {
-        boolean hasTools = toolExecutions != null && !toolExecutions.isEmpty();
-        boolean hasKnowledge = knowledgeSources != null && !knowledgeSources.isEmpty();
-        if (hasTools && hasKnowledge) {
-            return "tool+rag";
-        }
-        if (hasTools) {
-            return "tool";
-        }
-        if (hasKnowledge) {
-            return "rag";
-        }
-        return "model";
-    }
-
-    private String resolveFinishReason(Result<String> assistantResult) {
-        if (assistantResult == null || assistantResult.finishReason() == null) {
-            return "unknown";
-        }
-        return assistantResult.finishReason().name().toLowerCase(Locale.ROOT);
-    }
-
-    private Map<String, Object> buildCompletePayload(AssistantChatResponseVo response) {
-        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
-        payload.put("conversationId", response.getConversationId());
-        payload.put("reply", response.getReply());
-        payload.put("paragraphs", response.getParagraphs());
-        payload.put("answerSource", response.getAnswerSource());
-        payload.put("finishReason", response.getFinishReason());
-        payload.put("toolExecutions", response.getToolExecutions());
-        payload.put("knowledgeSources", response.getKnowledgeSources());
-        payload.put("taskState", response.getTaskState());
-        payload.put("nextActions", response.getNextActions());
-        return payload;
-    }
-
-    private AssistantTaskState resolveTaskState(String conversationId, Result<String> assistantResult) {
-        AssistantTaskState previousState = assistantTaskStateStore.get(conversationId);
-        AssistantTaskState nextState = deriveTaskState(
-                assistantResult == null ? null : assistantResult.toolExecutions(),
-                assistantResult != null && assistantResult.sources() != null && !assistantResult.sources().isEmpty(),
-                previousState
-        );
-        if (nextState != null) {
-            assistantTaskStateStore.save(conversationId, nextState);
-            return nextState;
-        }
-        return previousState;
-    }
-
-    private AssistantTaskState resolveTaskState(String conversationId,
-                                                List<ToolExecution> toolExecutions,
-                                                boolean hasKnowledgeSources) {
-        AssistantTaskState previousState = assistantTaskStateStore.get(conversationId);
-        AssistantTaskState nextState = deriveTaskState(toolExecutions, hasKnowledgeSources, previousState);
-        if (nextState != null) {
-            assistantTaskStateStore.save(conversationId, nextState);
-            return nextState;
-        }
-        return previousState;
-    }
-
-    private AssistantTaskState deriveTaskState(List<ToolExecution> toolExecutions,
-                                               boolean hasKnowledgeSources,
-                                               AssistantTaskState previousState) {
-        AssistantTaskState currentState = previousState;
-        boolean stateUpdated = false;
-        if (toolExecutions != null) {
-            for (ToolExecution toolExecution : toolExecutions) {
-                AssistantTaskState derivedState = buildTaskStateFromToolExecution(toolExecution, currentState);
-                if (derivedState != null) {
-                    currentState = derivedState;
-                    stateUpdated = true;
-                }
-            }
-        }
-        if (stateUpdated) {
-            return currentState;
-        }
-        if (hasKnowledgeSources) {
-            return new AssistantTaskState("KNOWLEDGE_QA", "COMPLETED", null, null, null, null, List.of());
-        }
-        return previousState;
-    }
-
-    private AssistantTaskState buildTaskStateFromToolExecution(ToolExecution toolExecution, AssistantTaskState previousState) {
-        if (toolExecution == null || toolExecution.request() == null) {
-            return null;
-        }
-
-        String toolName = toolExecution.request().name();
-        JsonNode resultNode = parseToolResult(toolExecution.result());
-        if (resultNode == null) {
-            return null;
-        }
-        return buildTaskStateFromToolResult(toolName, resultNode, previousState);
-    }
-
-    private AssistantTaskState buildTaskStateFromToolResult(String toolName, JsonNode resultNode, AssistantTaskState previousState) {
-        if (resultNode == null) {
-            return previousState;
-        }
-        if ("searchRooms".equals(toolName)) {
-            List<AssistantTaskState.RoomCandidate> candidates = extractRoomCandidates(resultNode.path("items"));
-            String taskStatus = candidates.isEmpty() ? "NEEDS_REFINEMENT" : "WAITING_USER_INPUT";
-            return new AssistantTaskState("ROOM_SEARCH", taskStatus, null, null, null, null, candidates);
-        }
-
-        if ("getRoomDetail".equals(toolName) || "getRoomDetailByKeyword".equals(toolName)) {
-            Long roomId = getLongValue(resultNode, "roomId");
-            String title = getTextValue(resultNode, "title");
-            Long apartmentId = getLongValue(resultNode, "apartmentId");
-            List<AssistantTaskState.RoomCandidate> candidates = previousState == null
-                    ? List.of()
-                    : previousState.candidateRooms();
-            return new AssistantTaskState("ROOM_DETAIL", "WAITING_USER_INPUT", roomId, title, apartmentId, null, candidates);
-        }
-
-        if ("createRoomAppointment".equals(toolName)) {
-            Long roomId = getLongValue(resultNode, "roomId");
-            Long apartmentId = getLongValue(resultNode, "apartmentId");
-            Long appointmentId = getLongValue(resultNode, "appointmentId");
-            String title = getTextValue(resultNode, "title");
-            String appointmentTime = getTextValue(resultNode, "appointmentTime");
-            List<AssistantTaskState.RoomCandidate> candidates = previousState == null
-                    ? List.of()
-                    : previousState.candidateRooms();
-            return new AssistantTaskState(
-                    "APPOINTMENT_CREATED",
-                    "COMPLETED",
-                    roomId,
-                    title,
-                    apartmentId,
-                    appointmentId,
-                    buildAppointmentLabel(appointmentId, title, appointmentTime),
-                    appointmentTime,
-                    candidates
-            );
-        }
-
-        if ("cancelAppointment".equals(toolName)) {
-            Long appointmentId = getLongValue(resultNode, "appointmentId");
-            String apartmentName = getTextValue(resultNode, "apartmentName");
-            String appointmentTime = getTextValue(resultNode, "appointmentTime");
-            return new AssistantTaskState(
-                    "APPOINTMENT_CANCELED",
-                    "COMPLETED",
-                    previousState == null ? null : previousState.selectedRoomId(),
-                    previousState == null ? null : previousState.selectedRoomTitle(),
-                    getLongValue(resultNode, "apartmentId"),
-                    appointmentId,
-                    buildAppointmentLabel(appointmentId, apartmentName, appointmentTime),
-                    null,
-                    previousState == null ? List.of() : safeCandidateRooms(previousState)
-            );
-        }
-
-        if ("rescheduleAppointment".equals(toolName)) {
-            Long appointmentId = getLongValue(resultNode, "appointmentId");
-            String apartmentName = getTextValue(resultNode, "apartmentName");
-            String appointmentTime = getTextValue(resultNode, "appointmentTime");
-            return new AssistantTaskState(
-                    "APPOINTMENT_RESCHEDULED",
-                    "COMPLETED",
-                    previousState == null ? null : previousState.selectedRoomId(),
-                    previousState == null ? null : previousState.selectedRoomTitle(),
-                    getLongValue(resultNode, "apartmentId"),
-                    appointmentId,
-                    buildAppointmentLabel(appointmentId, apartmentName, appointmentTime),
-                    appointmentTime,
-                    previousState == null ? List.of() : safeCandidateRooms(previousState)
-            );
-        }
-
-        if ("getMyAppointments".equals(toolName)) {
-            AppointmentSelection appointmentSelection = extractCancelableAppointment(resultNode.path("items"));
-            return new AssistantTaskState(
-                    "APPOINTMENT_QUERY",
-                    "COMPLETED",
-                    null,
-                    null,
-                    null,
-                    appointmentSelection == null ? null : appointmentSelection.appointmentId(),
-                    appointmentSelection == null ? null : appointmentSelection.label(),
-                    null,
-                    List.of()
-            );
-        }
-
-        if ("getMyLeaseAgreements".equals(toolName)) {
-            return new AssistantTaskState("LEASE_QUERY", "COMPLETED", null, null, null, null, List.of());
-        }
-
-        return previousState;
-    }
-
-    private List<AssistantTaskState.RoomCandidate> extractRoomCandidates(JsonNode itemsNode) {
-        if (itemsNode == null || !itemsNode.isArray()) {
-            return List.of();
-        }
-
-        List<AssistantTaskState.RoomCandidate> candidates = new ArrayList<>();
-        for (JsonNode itemNode : itemsNode) {
-            Long roomId = getLongValue(itemNode, "roomId");
-            String title = getTextValue(itemNode, "title");
-            if (roomId == null || !StringUtils.hasText(title)) {
-                continue;
-            }
-            candidates.add(new AssistantTaskState.RoomCandidate(roomId, title));
-        }
-        return List.copyOf(candidates);
-    }
-
-    private AppointmentSelection extractCancelableAppointment(JsonNode itemsNode) {
-        if (itemsNode == null || !itemsNode.isArray()) {
-            return null;
-        }
-        for (JsonNode itemNode : itemsNode) {
-            Long appointmentId = getLongValue(itemNode, "appointmentId");
-            Integer appointmentStatusCode = itemNode.hasNonNull("appointmentStatusCode")
-                    ? itemNode.get("appointmentStatusCode").asInt()
-                    : null;
-            if (appointmentId == null || appointmentStatusCode == null || appointmentStatusCode != 1) {
-                continue;
-            }
-            return new AppointmentSelection(
-                    appointmentId,
-                    buildAppointmentLabel(
-                            appointmentId,
-                            getTextValue(itemNode, "apartmentName"),
-                            getTextValue(itemNode, "appointmentTime")
-                    )
-            );
-        }
-        return null;
-    }
-
-    private List<AssistantNextActionVo> buildNextActions(AssistantTaskState taskState) {
-        if (taskState == null || !StringUtils.hasText(taskState.taskType())) {
-            return List.of();
-        }
-
-        List<AssistantNextActionVo> actions = new ArrayList<>();
-        if ("APPOINTMENT_CREATED".equals(taskState.taskType()) && taskState.selectedAppointmentId() != null) {
-            return List.of(
-                    new AssistantNextActionVo("VIEW_APPOINTMENTS", "查看我的预约", "帮我看一下我的预约", null, false),
-                    new AssistantNextActionVo("RESCHEDULE_CURRENT_APPOINTMENT", "修改这次预约时间", "把刚刚的预约改到明天下午3点", null, true),
-                    new AssistantNextActionVo("CANCEL_CURRENT_APPOINTMENT", "取消这次预约", "取消刚刚的预约", null, true),
-                    new AssistantNextActionVo("SEARCH_MORE_ROOMS", "继续看看其他房源", "再给我推荐几套房源", null, false)
-            );
-        }
-        if ("APPOINTMENT_QUERY".equals(taskState.taskType()) && taskState.selectedAppointmentId() != null) {
-            return List.of(
-                    new AssistantNextActionVo("CANCEL_LATEST_APPOINTMENT", "取消最新预约", "取消最新预约", null, true),
-                    new AssistantNextActionVo("RESCHEDULE_LATEST_APPOINTMENT", "修改最新预约时间", "把最新预约改到明天下午3点", null, true),
-                    new AssistantNextActionVo("VIEW_LEASES", "查看我的租约", "帮我看看我的租约", null)
-            );
-        }
-        if ("APPOINTMENT_CANCEL_CONFIRMING".equals(taskState.taskType())) {
-            return List.of(
-                    new AssistantNextActionVo("CONFIRM_CANCEL_APPOINTMENT", "确认取消", "确认", null, true),
-                    new AssistantNextActionVo("KEEP_APPOINTMENT", "保留这条预约", "保留", null, false)
-            );
-        }
-        if ("APPOINTMENT_CANCELED".equals(taskState.taskType())) {
-            return List.of(
-                    new AssistantNextActionVo("VIEW_APPOINTMENTS", "再看一下我的预约", "帮我看一下我的预约", null, false),
-                    new AssistantNextActionVo("SEARCH_MORE_ROOMS", "继续看看其他房源", "再给我推荐几套房源", null, false)
-            );
-        }
-        if ("APPOINTMENT_RESCHEDULE_INTENT".equals(taskState.taskType())) {
-            return List.of(
-                    new AssistantNextActionVo("RESCHEDULE_TOMORROW_AFTERNOON", "改到明天下午", "把这条预约改到明天下午", taskState.selectedAppointmentId(), false),
-                    new AssistantNextActionVo("RESCHEDULE_TOMORROW_MORNING", "改到明天上午", "把这条预约改到明天上午", taskState.selectedAppointmentId(), false),
-                    new AssistantNextActionVo("VIEW_APPOINTMENTS", "再看一下我的预约", "帮我看一下我的预约", null, false)
-            );
-        }
-        if ("APPOINTMENT_RESCHEDULE_CONFIRMING".equals(taskState.taskType())) {
-            return List.of(
-                    new AssistantNextActionVo("CONFIRM_RESCHEDULE_APPOINTMENT", "确认改约", "确认", taskState.selectedAppointmentId(), true),
-                    new AssistantNextActionVo("KEEP_ORIGINAL_APPOINTMENT_TIME", "先不改了", "保留", taskState.selectedAppointmentId(), false)
-            );
-        }
-        if ("APPOINTMENT_RESCHEDULED".equals(taskState.taskType())) {
-            return List.of(
-                    new AssistantNextActionVo("VIEW_APPOINTMENTS", "查看我的预约", "帮我看一下我的预约", null, false),
-                    new AssistantNextActionVo("CANCEL_CURRENT_APPOINTMENT", "取消这条预约", "取消这条预约", null, true)
-            );
-        }
-        if ("ROOM_SEARCH".equals(taskState.taskType())) {
-            List<AssistantTaskState.RoomCandidate> candidates = taskState.candidateRooms() == null
-                    ? List.of()
-                    : taskState.candidateRooms();
-            for (int i = 0; i < Math.min(candidates.size(), 3); i++) {
-                AssistantTaskState.RoomCandidate candidate = candidates.get(i);
-                actions.add(new AssistantNextActionVo(
-                        "VIEW_ROOM_DETAIL",
-                        "查看第" + (i + 1) + "个房源",
-                        candidate.title() + " 介绍一下",
-                        candidate.roomId()
-                ));
-            }
-            if (candidates.isEmpty()) {
-                actions.add(new AssistantNextActionVo(
-                        "REFINE_ROOM_SEARCH",
-                        "放宽条件重新查找",
-                        "帮我查一下北京市 3500 以内的房源",
-                        null
-                ));
-            } else {
-                actions.add(new AssistantNextActionVo(
-                        "REFINE_ROOM_SEARCH",
-                        "换个条件再查",
-                        "帮我再查一下其他条件的房源",
-                        null
-                ));
-            }
-            return List.copyOf(actions);
-        }
-
-        if ("ROOM_DETAIL".equals(taskState.taskType())) {
-            actions.add(new AssistantNextActionVo(
-                    "ASK_APPOINTMENT",
-                    "问这个房源能否预约",
-                    "这个房源可以预约吗",
-                    taskState.selectedRoomId()
-            ));
-            actions.add(new AssistantNextActionVo(
-                    "SEARCH_MORE_ROOMS",
-                    "继续看看其他房源",
-                    "再给我推荐几套房源",
-                    null
-            ));
-            return List.copyOf(actions);
-        }
-
-        if ("APPOINTMENT_INTENT".equals(taskState.taskType())) {
-            return List.of(
-                    new AssistantNextActionVo("SCHEDULE_TOMORROW_AFTERNOON", "预约明天下午", "帮我预约明天下午", taskState.selectedRoomId(), false),
-                    new AssistantNextActionVo("SCHEDULE_TOMORROW_MORNING", "预约明天上午", "帮我预约明天上午", taskState.selectedRoomId(), false),
-                    new AssistantNextActionVo("VIEW_APPOINTMENTS", "查看我的预约", "帮我看一下我的预约", null, false)
-            );
-        }
-
-        if ("APPOINTMENT_CONFIRMING".equals(taskState.taskType())) {
-            return List.of(
-                    new AssistantNextActionVo("CONFIRM_APPOINTMENT", "确认预约", "确认", taskState.selectedRoomId(), true),
-                    new AssistantNextActionVo("CANCEL_APPOINTMENT", "取消本次预约", "取消", taskState.selectedRoomId(), false)
-            );
-        }
-
-        if ("APPOINTMENT_CREATED".equals(taskState.taskType())) {
-            return List.of(
-                    new AssistantNextActionVo("VIEW_APPOINTMENTS", "查看我的预约", "帮我看一下我的预约", null, false),
-                    new AssistantNextActionVo("SEARCH_MORE_ROOMS", "继续看看其他房源", "再给我推荐几套房源", null, false)
-            );
-        }
-
-        if ("APPOINTMENT_QUERY".equals(taskState.taskType())) {
-            return List.of(
-                    new AssistantNextActionVo("VIEW_LEASES", "查看我的租约", "帮我看看我的租约", null)
-            );
-        }
-
-        if ("LEASE_QUERY".equals(taskState.taskType())) {
-            return List.of(
-                    new AssistantNextActionVo("VIEW_APPOINTMENTS", "查看我的预约", "帮我看看我的预约", null)
-            );
-        }
-
-        if ("KNOWLEDGE_QA".equals(taskState.taskType())) {
-            return List.of(
-                    new AssistantNextActionVo("SEARCH_ROOMS", "开始查房源", "帮我查一下北京市 3000 以内的房源", null)
-            );
-        }
-
-        return List.of();
-    }
-
-    private AssistantTaskStateVo toTaskStateVo(AssistantTaskState taskState) {
-        if (taskState == null) {
-            return null;
-        }
-        List<AssistantRoomCandidateVo> candidates = taskState.candidateRooms() == null
-                ? List.of()
-                : taskState.candidateRooms().stream()
-                .map(candidate -> new AssistantRoomCandidateVo(candidate.roomId(), candidate.title()))
-                .toList();
-        return new AssistantTaskStateVo(
-                taskState.taskType(),
-                taskState.taskStatus(),
-                taskState.selectedRoomId(),
-                taskState.selectedRoomTitle(),
-                taskState.selectedApartmentId(),
-                taskState.selectedAppointmentId(),
-                taskState.selectedAppointmentLabel(),
-                taskState.proposedAppointmentTime(),
-                candidates
-        );
-    }
 
     private JsonNode parseToolResult(String toolResult) {
-        if (!StringUtils.hasText(toolResult)) {
-            return null;
-        }
-        try {
-            return objectMapper.readTree(toolResult);
-        } catch (Exception e) {
-            log.debug("Failed to parse tool result as JSON", e);
-            return null;
-        }
+        return conversationSupport.parseToolResult(toolResult);
     }
 
     private Long getLongValue(JsonNode node, String fieldName) {
-        if (node == null || !node.hasNonNull(fieldName)) {
-            return null;
-        }
-        JsonNode valueNode = node.get(fieldName);
-        return valueNode.canConvertToLong() ? valueNode.longValue() : null;
+        return conversationSupport.getLongValue(node, fieldName);
     }
 
     private String getTextValue(JsonNode node, String fieldName) {
-        if (node == null || !node.hasNonNull(fieldName)) {
-            return null;
-        }
-        String value = node.get(fieldName).asText(null);
-        return StringUtils.hasText(value) ? value.trim() : null;
+        return conversationSupport.getTextValue(node, fieldName);
     }
 
     private void emitToolEvents(SseEmitter emitter, AssistantChatResponseVo response) {
@@ -2656,14 +1680,7 @@ public class AssistantChatService {
     }
 
     private String summarizeToolResult(String toolResult) {
-        if (!StringUtils.hasText(toolResult)) {
-            return "工具已执行完成";
-        }
-        String normalized = toolResult.replace("\r\n", "\n").replace('\r', '\n').trim();
-        if (normalized.length() <= 240) {
-            return normalized;
-        }
-        return normalized.substring(0, 240) + "...";
+        return conversationSupport.summarizeToolResult(toolResult);
     }
 
     private void emitErrorAndComplete(SseEmitter emitter, Throwable throwable, String conversationId) {
@@ -2766,30 +1783,6 @@ public class AssistantChatService {
         return "lease-chat-" + UUID.randomUUID();
     }
 
-    private String formatReply(String reply) {
-        if (!StringUtils.hasText(reply)) {
-            return DEFAULT_EMPTY_REPLY;
-        }
-
-        String normalized = reply
-                .replace("\r\n", "\n")
-                .replace('\r', '\n')
-                .replaceFirst("^```[a-zA-Z]*\\n?", "")
-                .replaceFirst("\\n?```$", "")
-                .replaceAll("[ \\t]+\\n", "\n")
-                .replaceAll("\\n{3,}", "\n\n")
-                .replaceAll("(?m)^\\s*[-*]\\s+", "• ");
-
-        return normalized.trim();
-    }
-
-    private List<String> splitParagraphs(String reply) {
-        return Arrays.stream(reply.split("\\n\\s*\\n"))
-                .map(String::trim)
-                .filter(StringUtils::hasText)
-                .toList();
-    }
-
     private List<String> splitForStreaming(String reply) {
         if (!StringUtils.hasText(reply)) {
             return List.of(DEFAULT_EMPTY_REPLY);
@@ -2872,3 +1865,4 @@ public class AssistantChatService {
     private record RoomSearchCriteria(String regionKeyword, BigDecimal minRent, BigDecimal maxRent) {
     }
 }
+

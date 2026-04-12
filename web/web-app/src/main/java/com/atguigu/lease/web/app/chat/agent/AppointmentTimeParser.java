@@ -4,8 +4,8 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.YearMonth;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.Locale;
@@ -14,10 +14,20 @@ import java.util.regex.Pattern;
 
 public final class AppointmentTimeParser {
 
-    private static final Pattern RELATIVE_PATTERN = Pattern.compile("(今天|明天|后天)(上午|中午|下午|晚上)?(?:(\\d{1,2})(?:点|:|：)(\\d{1,2})?)?");
-    private static final Pattern ABSOLUTE_DATE_TIME_PATTERN = Pattern.compile("(\\d{4})[-/年](\\d{1,2})[-/月](\\d{1,2})(?:日)?(?:\\s*(上午|中午|下午|晚上))?(?:\\s*(\\d{1,2})(?:点|:|：)(\\d{1,2})?)?");
-    private static final Pattern MONTH_DAY_PATTERN = Pattern.compile("(\\d{1,2})月(\\d{1,2})(?:日|号)?(?:\\s*(上午|中午|下午|晚上))?(?:\\s*(\\d{1,2})(?:点|:|：)(\\d{1,2})?)?");
-    private static final Pattern DAY_OF_MONTH_PATTERN = Pattern.compile("(\\d{1,2})(?:日|号)(?:的)?(?:\\s*(上午|中午|下午|晚上))?(?:\\s*(\\d{1,2})(?:点|:|：)(\\d{1,2})?)?");
+    private static final String PERIOD_REGEX = "(上午|中午|下午|晚上)";
+    private static final String TIME_REGEX = "(?:\\s*(\\d{1,2})(?:点|:|：)(\\d{1,2})?)?";
+    private static final Pattern RELATIVE_PATTERN = Pattern.compile(
+            "(今天|明天|后天)(?:的)?(?:\\s*" + PERIOD_REGEX + ")?(?:的)?" + TIME_REGEX
+    );
+    private static final Pattern ABSOLUTE_DATE_TIME_PATTERN = Pattern.compile(
+            "(\\d{4})[-/年](\\d{1,2})[-/月](\\d{1,2})(?:日|号)?(?:的)?(?:\\s*" + PERIOD_REGEX + ")?(?:的)?" + TIME_REGEX
+    );
+    private static final Pattern MONTH_DAY_PATTERN = Pattern.compile(
+            "(\\d{1,2})月(\\d{1,2})(?:日|号)?(?:的)?(?:\\s*" + PERIOD_REGEX + ")?(?:的)?" + TIME_REGEX
+    );
+    private static final Pattern DAY_OF_MONTH_PATTERN = Pattern.compile(
+            "(\\d{1,2})(?:日|号)(?:的)?(?:\\s*" + PERIOD_REGEX + ")?(?:的)?" + TIME_REGEX
+    );
     private static final DateTimeFormatter DISPLAY_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private AppointmentTimeParser() {
@@ -194,7 +204,7 @@ public final class AppointmentTimeParser {
                 .replace("这个", "")
                 .replace("房源", "")
                 .replace("安排", "")
-                .replace("一下", "")
+                .replace("一个", "")
                 .replaceAll("\\s+", "");
     }
 

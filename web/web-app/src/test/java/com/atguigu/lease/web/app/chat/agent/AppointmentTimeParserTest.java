@@ -17,4 +17,13 @@ class AppointmentTimeParserTest {
         assertNotNull(parsed);
         assertEquals("11:00", parsed.displayText().substring(11));
     }
+
+    @Test
+    void parse_shouldSupportRelativeDateWithDeBeforeExplicitHour() {
+        AppointmentTimeParser.ParsedAppointmentTime parsed =
+                AppointmentTimeParser.parse("明天的12点", ZoneId.systemDefault());
+
+        assertNotNull(parsed);
+        assertEquals("12:00", parsed.displayText().substring(11));
+    }
 }
