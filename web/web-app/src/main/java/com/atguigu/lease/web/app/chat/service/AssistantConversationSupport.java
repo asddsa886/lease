@@ -237,29 +237,10 @@ public class AssistantConversationSupport {
                     new AssistantNextActionVo("VIEW_LEASES", "查看我的租约", "帮我看看我的租约", null)
             );
         }
-        if ("APPOINTMENT_CANCEL_CONFIRMING".equals(taskState.taskType())) {
-            return List.of(
-                    new AssistantNextActionVo("CONFIRM_CANCEL_APPOINTMENT", "确认取消", "确认", null, true),
-                    new AssistantNextActionVo("KEEP_APPOINTMENT", "保留这条预约", "保留", null, false)
-            );
-        }
         if ("APPOINTMENT_CANCELED".equals(taskState.taskType())) {
             return List.of(
                     new AssistantNextActionVo("VIEW_APPOINTMENTS", "再看一下我的预约", "帮我看一下我的预约", null, false),
                     new AssistantNextActionVo("SEARCH_MORE_ROOMS", "继续看看其他房源", "再给我推荐几套房源", null, false)
-            );
-        }
-        if ("APPOINTMENT_RESCHEDULE_INTENT".equals(taskState.taskType())) {
-            return List.of(
-                    new AssistantNextActionVo("RESCHEDULE_TOMORROW_AFTERNOON", "改到明天下午", "把这条预约改到明天下午", taskState.selectedAppointmentId(), false),
-                    new AssistantNextActionVo("RESCHEDULE_TOMORROW_MORNING", "改到明天上午", "把这条预约改到明天上午", taskState.selectedAppointmentId(), false),
-                    new AssistantNextActionVo("VIEW_APPOINTMENTS", "再看一下我的预约", "帮我看一下我的预约", null, false)
-            );
-        }
-        if ("APPOINTMENT_RESCHEDULE_CONFIRMING".equals(taskState.taskType())) {
-            return List.of(
-                    new AssistantNextActionVo("CONFIRM_RESCHEDULE_APPOINTMENT", "确认改约", "确认", taskState.selectedAppointmentId(), true),
-                    new AssistantNextActionVo("KEEP_ORIGINAL_APPOINTMENT_TIME", "先不改了", "保留", taskState.selectedAppointmentId(), false)
             );
         }
         if ("APPOINTMENT_RESCHEDULED".equals(taskState.taskType())) {
@@ -313,21 +294,6 @@ public class AssistantConversationSupport {
                     null
             ));
             return List.copyOf(actions);
-        }
-
-        if ("APPOINTMENT_INTENT".equals(taskState.taskType())) {
-            return List.of(
-                    new AssistantNextActionVo("SCHEDULE_TOMORROW_AFTERNOON", "预约明天下午", "帮我预约明天下午", taskState.selectedRoomId(), false),
-                    new AssistantNextActionVo("SCHEDULE_TOMORROW_MORNING", "预约明天上午", "帮我预约明天上午", taskState.selectedRoomId(), false),
-                    new AssistantNextActionVo("VIEW_APPOINTMENTS", "查看我的预约", "帮我看一下我的预约", null, false)
-            );
-        }
-
-        if ("APPOINTMENT_CONFIRMING".equals(taskState.taskType())) {
-            return List.of(
-                    new AssistantNextActionVo("CONFIRM_APPOINTMENT", "确认预约", "确认", taskState.selectedRoomId(), true),
-                    new AssistantNextActionVo("CANCEL_APPOINTMENT", "取消本次预约", "取消", taskState.selectedRoomId(), false)
-            );
         }
 
         if ("APPOINTMENT_CREATED".equals(taskState.taskType())) {

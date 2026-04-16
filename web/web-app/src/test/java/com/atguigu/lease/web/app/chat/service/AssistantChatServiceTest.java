@@ -1,13 +1,11 @@
 package com.atguigu.lease.web.app.chat.service;
 
-import com.atguigu.lease.common.login.LoginUser;
 import com.atguigu.lease.common.login.LoginUserHolder;
 import com.atguigu.lease.web.app.chat.agent.AssistantTaskState;
 import com.atguigu.lease.web.app.chat.agent.AssistantTaskStateStore;
 import com.atguigu.lease.web.app.chat.config.AssistantProperties;
 import com.atguigu.lease.web.app.chat.dto.AssistantChatResponseVo;
 import com.atguigu.lease.web.app.chat.memory.AssistantMongoChatMemoryStore;
-import com.atguigu.lease.web.app.chat.tool.RentalAssistantTools;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.service.Result;
 import dev.langchain4j.service.tool.ToolExecution;
@@ -22,11 +20,10 @@ import org.springframework.beans.factory.ObjectProvider;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -39,8 +36,6 @@ class AssistantChatServiceTest {
     private ObjectProvider<StreamingRentalAssistant> streamingRentalAssistantProvider;
     @Mock
     private ObjectProvider<AssistantMongoChatMemoryStore> assistantChatMemoryStoreProvider;
-    @Mock
-    private RentalAssistantTools rentalAssistantTools;
 
     private AssistantTaskStateStore assistantTaskStateStore;
     private AssistantChatService assistantChatService;
@@ -57,7 +52,6 @@ class AssistantChatServiceTest {
                 rentalAssistantProvider,
                 streamingRentalAssistantProvider,
                 assistantChatMemoryStoreProvider,
-                rentalAssistantTools,
                 assistantTaskStateStore,
                 conversationSupport
         );
@@ -69,23 +63,43 @@ class AssistantChatServiceTest {
     }
 
     @Test
-    void chat_shouldUseLocalAppointmentStateMachineBeforeInvokingModel() {
-        LoginUserHolder.set(new LoginUser(8L, "17503976585"));
+    void chat_shouldUseAssistantToolExecutionsForAppointmentCreateInsteadOfLocalStateMachine() {
         assistantTaskStateStore.save(
                 "room-chat-001",
                 new AssistantTaskState("ROOM_DETAIL", "WAITING_USER_INPUT", 2L, "Huilongguan Room 102", 12L, null, List.of())
         );
 
+        ToolExecution createRoomAppointment = toolExecution(
+                "createRoomAppointment",
+                "{\"roomId\":2,\"appointmentTimeText\":\"明天下午\"}",
+                """
+                        {
+                          "tool":"createRoomAppointment",
+                          "summary":"appointment created",
+                          "appointmentId":16,
+                          "appointmentTime":"2026-04-17 15:00",
+                          "roomId":2,
+                          "apartmentId":12,
+                          "title":"Huilongguan Room 102"
+                        }
+                        """
+        );
+        RentalAssistant rentalAssistant = mock(RentalAssistant.class);
+        when(rentalAssistant.chat(anyString(), anyString())).thenReturn(
+                new Result<>("appointment created", null, List.of(), null, List.of(createRoomAppointment))
+        );
+        when(rentalAssistantProvider.getIfAvailable()).thenReturn(rentalAssistant);
+
         AssistantChatResponseVo response = assistantChatService.chat(
-                "\u5e2e\u6211\u9884\u7ea6\u660e\u5929\u4e0b\u5348",
+                "帮我预约明天下午",
                 "room-chat-001"
         );
 
-        assertEquals("APPOINTMENT_CONFIRMING", response.getTaskState().getTaskType());
-        assertEquals("WAITING_CONFIRMATION", response.getTaskState().getTaskStatus());
-        assertEquals(2L, response.getTaskState().getSelectedRoomId());
-        assertFalse(response.getTaskState().getProposedAppointmentTime().isBlank());
-        verify(rentalAssistantProvider, never()).getIfAvailable();
+        assertEquals("tool", response.getAnswerSource());
+        assertEquals("APPOINTMENT_CREATED", response.getTaskState().getTaskType());
+        assertEquals("COMPLETED", response.getTaskState().getTaskStatus());
+        assertEquals(16L, response.getTaskState().getSelectedAppointmentId());
+        verify(rentalAssistantProvider, times(1)).getIfAvailable();
     }
 
     @Test
@@ -125,7 +139,7 @@ class AssistantChatServiceTest {
         when(rentalAssistantProvider.getIfAvailable()).thenReturn(rentalAssistant);
 
         AssistantChatResponseVo response = assistantChatService.chat(
-                "\u5e2e\u6211\u53d6\u6d88\u6700\u65b0\u9884\u7ea6",
+                "帮我取消最新预约",
                 "room-chat-002"
         );
 
@@ -156,7 +170,7 @@ class AssistantChatServiceTest {
         when(rentalAssistantProvider.getIfAvailable()).thenReturn(rentalAssistant);
 
         AssistantChatResponseVo response = assistantChatService.chat(
-                "\u67e5\u770b\u60a8\u7684\u6240\u6709\u9884\u7ea6\u8bb0\u5f55",
+                "查看您的所有预约记录",
                 "room-chat-003"
         );
 
@@ -164,7 +178,6 @@ class AssistantChatServiceTest {
         assertEquals("APPOINTMENT_QUERY", response.getTaskState().getTaskType());
         assertEquals("CANCEL_LATEST_APPOINTMENT", response.getNextActions().get(0).getAction());
         assertEquals("getMyAppointments", response.getToolExecutions().get(0).getToolName());
-        verify(rentalAssistantTools, never()).getMyAppointments();
     }
 
     @Test
@@ -189,7 +202,7 @@ class AssistantChatServiceTest {
         when(rentalAssistantProvider.getIfAvailable()).thenReturn(rentalAssistant);
 
         AssistantChatResponseVo response = assistantChatService.chat(
-                "\u5e2e\u6211\u67e5\u4e00\u4e0b\u5317\u4eac\u5e023000\u4ee5\u5185\u7684\u623f\u6e90",
+                "帮我查一下北京市3000以内的房源",
                 "room-chat-004"
         );
 
@@ -200,8 +213,7 @@ class AssistantChatServiceTest {
     }
 
     @Test
-    void chat_shouldEnterRescheduleConfirmationWhenQuestionContainsDayOfMonthTime() {
-        LoginUserHolder.set(new LoginUser(8L, "17503976585"));
+    void chat_shouldUseAssistantToolExecutionsForAppointmentRescheduleWithoutLocalConfirmation() {
         assistantTaskStateStore.save(
                 "room-chat-005",
                 new AssistantTaskState(
@@ -211,24 +223,44 @@ class AssistantChatServiceTest {
                         null,
                         null,
                         14L,
-                        "\u9884\u7ea6ID 14 / Wendu Apartment / 2026-04-11 12:00",
+                        "预约ID 14 / Wendu Apartment / 2026-04-11 12:00",
                         null,
                         List.of()
                 )
         );
 
+        ToolExecution rescheduleAppointment = toolExecution(
+                "rescheduleAppointment",
+                "{\"appointmentId\":14,\"appointmentTimeText\":\"11号11点\"}",
+                """
+                        {
+                          "tool":"rescheduleAppointment",
+                          "summary":"appointment rescheduled",
+                          "appointmentId":14,
+                          "appointmentStatusCode":1,
+                          "appointmentStatusText":"WAITING",
+                          "apartmentName":"Wendu Apartment",
+                          "appointmentTime":"2026-04-11 11:00"
+                        }
+                        """
+        );
+        RentalAssistant rentalAssistant = mock(RentalAssistant.class);
+        when(rentalAssistant.chat(anyString(), anyString())).thenReturn(
+                new Result<>("appointment rescheduled", null, List.of(), null, List.of(rescheduleAppointment))
+        );
+        when(rentalAssistantProvider.getIfAvailable()).thenReturn(rentalAssistant);
+
         AssistantChatResponseVo response = assistantChatService.chat(
-                "\u628a\u8fd9\u6761\u9884\u7ea6\u6539\u523011\u53f7\u768411\u70b9",
+                "把这条预约改到11号的11点",
                 "room-chat-005"
         );
 
-        assertEquals("APPOINTMENT_RESCHEDULE_CONFIRMING", response.getTaskState().getTaskType());
-        assertEquals("WAITING_CONFIRMATION", response.getTaskState().getTaskStatus());
+        assertEquals("tool", response.getAnswerSource());
+        assertEquals("APPOINTMENT_RESCHEDULED", response.getTaskState().getTaskType());
+        assertEquals("COMPLETED", response.getTaskState().getTaskStatus());
         assertEquals(14L, response.getTaskState().getSelectedAppointmentId());
-        assertEquals("CONFIRM_RESCHEDULE_APPOINTMENT", response.getNextActions().get(0).getAction());
-        assertEquals("agent", response.getAnswerSource());
-        assertEquals("11:00", response.getTaskState().getProposedAppointmentTime().substring(11));
-        verify(rentalAssistantProvider, never()).getIfAvailable();
+        assertEquals("VIEW_APPOINTMENTS", response.getNextActions().get(0).getAction());
+        verify(rentalAssistantProvider, times(1)).getIfAvailable();
     }
 
     @Test
@@ -272,7 +304,7 @@ class AssistantChatServiceTest {
         when(rentalAssistantProvider.getIfAvailable()).thenReturn(rentalAssistant);
 
         AssistantChatResponseVo response = assistantChatService.chat(
-                "\u6e29\u90fd\u6c34\u57ce\u793e\u533a101\u4ecb\u7ecd\u4e00\u4e0b",
+                "温都水城社区101介绍一下",
                 "room-chat-006"
         );
 
