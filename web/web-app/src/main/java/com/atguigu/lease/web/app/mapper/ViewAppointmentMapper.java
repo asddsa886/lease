@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 
 import org.apache.ibatis.annotations.Param;
 
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -23,8 +24,23 @@ public interface ViewAppointmentMapper extends BaseMapper<ViewAppointment> {
      * 批量查询预约列表对应的公寓图片（避免 resultMap + nested select 导致 N+1）
      */
     List<GraphVo> listApartmentGraphsByApartmentIds(@Param("apartmentIds") List<Long> apartmentIds);
-}
 
+    int countWaitingDuplicate(@Param("userId") Long userId,
+                              @Param("apartmentId") Long apartmentId,
+                              @Param("appointmentTime") Date appointmentTime,
+                              @Param("excludeId") Long excludeId);
+
+    int countWaitingByUserAndTime(@Param("userId") Long userId,
+                                  @Param("appointmentTime") Date appointmentTime,
+                                  @Param("excludeId") Long excludeId);
+
+    int countWaitingByApartmentAndTime(@Param("apartmentId") Long apartmentId,
+                                       @Param("appointmentTime") Date appointmentTime,
+                                       @Param("excludeId") Long excludeId);
+
+    int cancelWaitingByIdAndUserId(@Param("appointmentId") Long appointmentId,
+                                   @Param("userId") Long userId);
+}
 
 
 

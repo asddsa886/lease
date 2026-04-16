@@ -31,4 +31,51 @@
             #{id}
         </foreach>
     </select>
+
+    <select id="countWaitingDuplicate" resultType="int">
+        select count(1)
+        from view_appointment
+        where is_deleted = 0
+          and user_id = #{userId}
+          and apartment_id = #{apartmentId}
+          and appointment_time = #{appointmentTime}
+          and appointment_status = 1
+        <if test="excludeId != null">
+            and id &lt;&gt; #{excludeId}
+        </if>
+    </select>
+
+    <select id="countWaitingByUserAndTime" resultType="int">
+        select count(1)
+        from view_appointment
+        where is_deleted = 0
+          and user_id = #{userId}
+          and appointment_time = #{appointmentTime}
+          and appointment_status = 1
+        <if test="excludeId != null">
+            and id &lt;&gt; #{excludeId}
+        </if>
+    </select>
+
+    <select id="countWaitingByApartmentAndTime" resultType="int">
+        select count(1)
+        from view_appointment
+        where is_deleted = 0
+          and apartment_id = #{apartmentId}
+          and appointment_time = #{appointmentTime}
+          and appointment_status = 1
+        <if test="excludeId != null">
+            and id &lt;&gt; #{excludeId}
+        </if>
+    </select>
+
+    <update id="cancelWaitingByIdAndUserId">
+        update view_appointment
+        set appointment_status = 2,
+            update_time = now()
+        where id = #{appointmentId}
+          and user_id = #{userId}
+          and is_deleted = 0
+          and appointment_status = 1
+    </update>
 </mapper>

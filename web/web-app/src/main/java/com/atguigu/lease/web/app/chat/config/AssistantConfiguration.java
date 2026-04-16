@@ -2,8 +2,6 @@ package com.atguigu.lease.web.app.chat.config;
 
 import com.atguigu.lease.web.app.chat.memory.AssistantMongoChatMemoryStore;
 import com.atguigu.lease.web.app.chat.rag.LocalKnowledgeContentRetriever;
-import com.atguigu.lease.web.app.chat.service.AppointmentActionAnalyzer;
-import com.atguigu.lease.web.app.chat.service.BusinessIntentAnalyzer;
 import com.atguigu.lease.web.app.chat.service.RentalAssistant;
 import com.atguigu.lease.web.app.chat.service.StreamingRentalAssistant;
 import com.atguigu.lease.web.app.chat.tool.RentalAssistantTools;
@@ -133,22 +131,6 @@ public class AssistantConfiguration {
             builder = builder.contentRetriever(assistantContentRetriever);
         }
         return builder.build();
-    }
-
-    @Bean
-    @ConditionalOnBean(ChatModel.class)
-    public BusinessIntentAnalyzer businessIntentAnalyzer(ChatModel assistantChatModel) {
-        return AiServices.builder(BusinessIntentAnalyzer.class)
-                .chatModel(assistantChatModel)
-                .build();
-    }
-
-    @Bean
-    @ConditionalOnBean(ChatModel.class)
-    public AppointmentActionAnalyzer appointmentActionAnalyzer(ChatModel assistantChatModel) {
-        return AiServices.builder(AppointmentActionAnalyzer.class)
-                .chatModel(assistantChatModel)
-                .build();
     }
 
     private void validateOpenAiCompatibleConfig(AssistantProperties assistantProperties) {

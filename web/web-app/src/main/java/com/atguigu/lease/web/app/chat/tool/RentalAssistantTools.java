@@ -1,5 +1,6 @@
 package com.atguigu.lease.web.app.chat.tool;
 
+import com.atguigu.lease.common.exception.LeaseException;
 import com.atguigu.lease.common.login.LoginUser;
 import com.atguigu.lease.common.login.LoginUserHolder;
 import com.atguigu.lease.model.entity.UserInfo;
@@ -220,7 +221,12 @@ public class RentalAssistantTools {
             appointment.setAdditionalInfo(additionalInfo.trim());
         }
 
-        viewAppointmentService.saveOrUpdateForCurrentUser(appointment, loginUser.getId());
+        try {
+            viewAppointmentService.saveOrUpdateForCurrentUser(appointment, loginUser.getId());
+        } catch (LeaseException e) {
+            payload.put("summary", e.getMessage());
+            return toJson(payload);
+        }
 
         payload.put("summary", "已为你创建看房预约，请留意预约时间并按时到场。");
         payload.put("appointmentId", appointment.getId());
@@ -284,7 +290,17 @@ public class RentalAssistantTools {
             return toJson(payload);
         }
 
-        ViewAppointment canceled = viewAppointmentService.cancelForCurrentUser(appointmentId, loginUser.getId());
+        ViewAppointment canceled;
+        try {
+            canceled = viewAppointmentService.cancelForCurrentUser(appointmentId, loginUser.getId());
+        } catch (LeaseException e) {
+            payload.put("summary", e.getMessage());
+            payload.put("appointmentStatusCode", appointment.getAppointmentStatus() == null ? null : appointment.getAppointmentStatus().getCode());
+            payload.put("appointmentStatusText", enumName(appointment.getAppointmentStatus(), "状态待确认"));
+            payload.put("apartmentName", safeText(apartmentName, "待确认公寓"));
+            payload.put("appointmentTime", appointmentTime);
+            return toJson(payload);
+        }
         payload.put("summary", "已为你取消这条看房预约。");
         payload.put("appointmentId", appointmentId);
         payload.put("appointmentStatusCode", AppointmentStatus.CANCELED.getCode());
@@ -343,11 +359,19 @@ public class RentalAssistantTools {
             return toJson(payload);
         }
 
-        ViewAppointment rescheduled = viewAppointmentService.rescheduleForCurrentUser(
-                appointmentId,
-                parsedAppointmentTime.date(),
-                loginUser.getId()
-        );
+        ViewAppointment rescheduled;
+        try {
+            rescheduled = viewAppointmentService.rescheduleForCurrentUser(
+                    appointmentId,
+                    parsedAppointmentTime.date(),
+                    loginUser.getId()
+            );
+        } catch (LeaseException e) {
+            payload.put("summary", e.getMessage());
+            payload.put("appointmentStatusCode", appointment.getAppointmentStatus() == null ? null : appointment.getAppointmentStatus().getCode());
+            payload.put("appointmentStatusText", enumName(appointment.getAppointmentStatus(), "状态待确认"));
+            return toJson(payload);
+        }
         payload.put("summary", "已为你修改预约时间，请按新的预约时间到场。");
         payload.put("appointmentStatusCode", AppointmentStatus.WAITING.getCode());
         payload.put("appointmentStatusText", AppointmentStatus.WAITING.getName());

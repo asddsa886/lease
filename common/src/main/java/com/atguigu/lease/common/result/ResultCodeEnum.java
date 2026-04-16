@@ -41,6 +41,11 @@ public enum ResultCodeEnum {
     APP_REQUEST_TOO_FREQUENT(508, "请求过于频繁，请稍后再试"),
     APP_SMS_SERVICE_ERROR(509, "短信服务异常，请稍后再试"),
     APP_SMS_CLIENT_INIT_ERROR(510, "短信服务初始化失败"),
+    APP_APPOINTMENT_TIME_INVALID(511, "预约时间必须晚于当前时间"),
+    APP_APPOINTMENT_TIME_CONFLICT(512, "该时间段你已有其他预约"),
+    APP_APARTMENT_APPOINTMENT_CONFLICT(513, "该房源该时间段已被预约，请选择其他时间"),
+    APP_APPOINTMENT_STATUS_ERROR(514, "当前预约状态不支持此操作"),
+    APP_APPOINTMENT_BUSY(515, "当前预约正在处理中，请稍后再试"),
 
     TOKEN_MISSING(600, "token缺失"),
 

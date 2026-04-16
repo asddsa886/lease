@@ -8,7 +8,6 @@ import com.atguigu.lease.web.app.chat.agent.AssistantTaskState;
 import com.atguigu.lease.web.app.chat.agent.AssistantTaskStateStore;
 import com.atguigu.lease.web.app.chat.config.AssistantProperties;
 import com.atguigu.lease.web.app.chat.dto.AssistantChatResponseVo;
-import com.atguigu.lease.web.app.chat.dto.AssistantKnowledgeSourceVo;
 import com.atguigu.lease.web.app.chat.dto.AssistantToolExecutionVo;
 import com.atguigu.lease.web.app.chat.memory.AssistantMongoChatMemoryStore;
 import com.atguigu.lease.web.app.chat.tool.RentalAssistantTools;
@@ -30,7 +29,6 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
@@ -47,7 +45,6 @@ import java.util.regex.Pattern;
 @Service
 @RequiredArgsConstructor
 public class AssistantChatService {
-
     private static final String DEFAULT_EMPTY_REPLY = "我当前没有生成有效回复，请换个问法再试。";
     private static final int STREAM_CHUNK_SIZE = 24;
     private static final ZoneId ZONE_ID = ZoneId.systemDefault();
@@ -61,12 +58,9 @@ public class AssistantChatService {
     private final AssistantProperties assistantProperties;
     private final ObjectProvider<RentalAssistant> rentalAssistantProvider;
     private final ObjectProvider<StreamingRentalAssistant> streamingRentalAssistantProvider;
-    private final ObjectProvider<AppointmentActionAnalyzer> appointmentActionAnalyzerProvider;
     private final ObjectProvider<AssistantMongoChatMemoryStore> assistantChatMemoryStoreProvider;
     private final RentalAssistantTools rentalAssistantTools;
     private final AssistantTaskStateStore assistantTaskStateStore;
-    private final AssistantWorkflowOrchestrator assistantWorkflowOrchestrator;
-    private final AssistantDeterministicToolExecutor deterministicToolExecutor;
     private final AssistantConversationSupport conversationSupport;
 
     public AssistantChatResponseVo chat(String message) {
@@ -82,16 +76,10 @@ public class AssistantChatService {
             logAssistantSuccess(question, localAgentResponse);
             return localAgentResponse;
         }
-        AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult = orchestrateQuestion(question, resolvedConversationId);
-        AssistantChatResponseVo deterministicToolResponse = deterministicToolExecutor.execute(resolvedConversationId, orchestrationResult);
-        if (deterministicToolResponse != null) {
-            logAssistantSuccess(question, deterministicToolResponse);
-            return deterministicToolResponse;
-        }
         RentalAssistant rentalAssistant = requireAssistant();
 
         try {
-            Result<String> assistantResult = invokeAssistantWithRecovery(rentalAssistant, resolvedConversationId, orchestrationResult);
+            Result<String> assistantResult = invokeAssistantWithRecovery(rentalAssistant, resolvedConversationId, question);
             AssistantChatResponseVo response = conversationSupport.buildAssistantResponse(resolvedConversationId, assistantResult);
             logAssistantSuccess(question, response);
             return response;
@@ -140,25 +128,6 @@ public class AssistantChatService {
             });
             return emitter;
         }
-
-        AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult = orchestrateQuestion(question, resolvedConversationId);
-        AssistantChatResponseVo deterministicToolResponse = deterministicToolExecutor.execute(resolvedConversationId, orchestrationResult);
-        if (deterministicToolResponse != null) {
-            sendEvent(emitter, "start", Map.of(
-                    "message", "开始生成回复",
-                    "conversationId", resolvedConversationId,
-                    "streamMode", "deterministic-tool"
-            ));
-            runAsyncWithLoginContext(currentLoginUser, currentAuthentication, () -> {
-                try {
-                    emitSyntheticResponse(emitter, extractOriginalQuestion(orchestrationResult), deterministicToolResponse);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    emitErrorAndComplete(emitter, e, resolvedConversationId);
-                }
-            });
-            return emitter;
-        }
         boolean nativeStreaming = shouldUseNativeStreaming(question);
         sendEvent(emitter, "start", Map.of(
                 "message", "开始生成回复",
@@ -171,7 +140,7 @@ public class AssistantChatService {
             runAsyncWithLoginContext(currentLoginUser, currentAuthentication, () -> startNativeStream(
                     emitter,
                     resolvedConversationId,
-                    orchestrationResult,
+                    question,
                     streamingAssistant
             ));
         } else {
@@ -179,32 +148,13 @@ public class AssistantChatService {
             runAsyncWithLoginContext(currentLoginUser, currentAuthentication, () -> startSyntheticStream(
                     emitter,
                     resolvedConversationId,
-                    orchestrationResult,
+                    question,
                     rentalAssistant
             ));
         }
         return emitter;
     }
 
-    private AssistantWorkflowOrchestrator.OrchestrationResult orchestrateQuestion(String question, String conversationId) {
-        AssistantTaskState currentState = assistantTaskStateStore.get(conversationId);
-        AssistantWorkflowOrchestrator.OrchestrationResult result = assistantWorkflowOrchestrator.orchestrate(
-                question,
-                conversationId,
-                currentState,
-                isLoggedIn()
-        );
-        if (result.orchestrated()) {
-            log.info(
-                    "Assistant question orchestrated, conversationId={}, intent={}, suggestedTool={}, question={}",
-                    conversationId,
-                    result.intent(),
-                    result.suggestedTool(),
-                    question
-            );
-        }
-        return result;
-    }
 
     private void ensureAssistantEnabled() {
         if (!assistantProperties.isEnabled()) {
@@ -224,12 +174,12 @@ public class AssistantChatService {
 
     private void startSyntheticStream(SseEmitter emitter,
                                       String conversationId,
-                                      AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult,
+                                      String question,
                                       RentalAssistant rentalAssistant) {
         try {
-            Result<String> assistantResult = invokeAssistantWithRecovery(rentalAssistant, conversationId, orchestrationResult);
+            Result<String> assistantResult = invokeAssistantWithRecovery(rentalAssistant, conversationId, question);
             AssistantChatResponseVo response = conversationSupport.buildAssistantResponse(conversationId, assistantResult);
-            emitSyntheticResponse(emitter, extractOriginalQuestion(orchestrationResult), response);
+            emitSyntheticResponse(emitter, question, response);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             emitErrorAndComplete(emitter, e, conversationId);
@@ -260,7 +210,7 @@ public class AssistantChatService {
 
     private void startNativeStream(SseEmitter emitter,
                                    String conversationId,
-                                   AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult,
+                                   String question,
                                    StreamingRentalAssistant streamingRentalAssistant) {
         if (streamingRentalAssistant == null) {
             emitErrorAndComplete(
@@ -272,8 +222,8 @@ public class AssistantChatService {
         }
 
         try {
-            TokenStream tokenStream = streamingRentalAssistant.chat(conversationId, orchestrationResult.question());
-            startTokenStream(emitter, conversationId, orchestrationResult, tokenStream);
+            TokenStream tokenStream = streamingRentalAssistant.chat(conversationId, question);
+            startTokenStream(emitter, conversationId, question, tokenStream);
         } catch (Exception e) {
             emitErrorAndComplete(emitter, e, conversationId);
         }
@@ -281,7 +231,7 @@ public class AssistantChatService {
 
     private void startTokenStream(SseEmitter emitter,
                                   String conversationId,
-                                  AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult,
+                                  String question,
                                   TokenStream tokenStream) {
         StringBuilder contentBuilder = new StringBuilder();
         List<AssistantToolExecutionVo> toolExecutions = new CopyOnWriteArrayList<>();
@@ -324,7 +274,7 @@ public class AssistantChatService {
                 .onCompleteResponse(chatResponse -> completeNativeStream(
                         emitter,
                         conversationId,
-                        orchestrationResult,
+                        question,
                         contentBuilder,
                         toolExecutions,
                         rawToolExecutions,
@@ -337,7 +287,7 @@ public class AssistantChatService {
 
     private void completeNativeStream(SseEmitter emitter,
                                       String conversationId,
-                                      AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult,
+                                      String question,
                                       StringBuilder contentBuilder,
                                       List<AssistantToolExecutionVo> toolExecutions,
                                       List<ToolExecution> rawToolExecutions,
@@ -347,8 +297,6 @@ public class AssistantChatService {
         if (!StringUtils.hasText(reply)) {
             reply = contentBuilder.toString();
         }
-
-        enforceToolExecutionIfRequired(orchestrationResult, toolExecutions);
 
         String formattedReply = conversationSupport.formatReply(reply);
         AssistantTaskState taskState = conversationSupport.resolveTaskState(conversationId, rawToolExecutions, false);
@@ -367,7 +315,7 @@ public class AssistantChatService {
         );
         sendEvent(emitter, "complete", conversationSupport.buildCompletePayload(response));
         emitter.complete();
-        logAssistantSuccess(extractOriginalQuestion(orchestrationResult), response);
+        logAssistantSuccess(question, response);
     }
 
     private AssistantChatResponseVo handleAgentAction(String question, String conversationId) {
@@ -388,18 +336,17 @@ public class AssistantChatService {
 
         boolean loggedIn = isLoggedIn();
         AppointmentTimeParser.ParsedAppointmentTime parsedAppointmentTime = AppointmentTimeParser.parse(question, ZONE_ID);
-        AppointmentActionDecision actionDecision = analyzeAppointmentAction(question, currentState);
         boolean confirmationFlow = "APPOINTMENT_CONFIRMING".equals(currentState.taskType());
         boolean cancelConfirmationFlow = "APPOINTMENT_CANCEL_CONFIRMING".equals(currentState.taskType());
         boolean rescheduleConfirmationFlow = "APPOINTMENT_RESCHEDULE_CONFIRMING".equals(currentState.taskType());
         boolean availabilityQuestion = isAppointmentAvailabilityQuestion(question, currentState);
-        boolean appointmentIntent = actionDecision.isCreate() || isRoomAppointmentIntent(question, currentState)
+        boolean appointmentIntent = isRoomAppointmentIntent(question, currentState)
                 || ("APPOINTMENT_INTENT".equals(currentState.taskType()) && parsedAppointmentTime != null);
-        boolean appointmentCancelIntent = actionDecision.isCancel() || isAppointmentCancelIntent(question, currentState);
-        boolean appointmentRescheduleIntent = actionDecision.isReschedule() || isAppointmentRescheduleIntent(question, currentState)
+        boolean appointmentCancelIntent = isAppointmentCancelIntent(question, currentState);
+        boolean appointmentRescheduleIntent = isAppointmentRescheduleIntent(question, currentState)
                 || ("APPOINTMENT_RESCHEDULE_INTENT".equals(currentState.taskType()) && parsedAppointmentTime != null);
         log.info(
-                "Assistant agent decision, conversationId={}, taskType={}, taskStatus={}, loggedIn={}, confirmationFlow={}, cancelConfirmationFlow={}, rescheduleConfirmationFlow={}, availabilityQuestion={}, appointmentIntent={}, appointmentCancelIntent={}, appointmentRescheduleIntent={}, llmAction={}, llmAppointmentId={}, llmRoomId={}, llmTimeText={}, question={}",
+                "Assistant agent decision, conversationId={}, taskType={}, taskStatus={}, loggedIn={}, confirmationFlow={}, cancelConfirmationFlow={}, rescheduleConfirmationFlow={}, availabilityQuestion={}, appointmentIntent={}, appointmentCancelIntent={}, appointmentRescheduleIntent={}, question={}",
                 conversationId,
                 currentState.taskType(),
                 currentState.taskStatus(),
@@ -411,10 +358,6 @@ public class AssistantChatService {
                 appointmentIntent,
                 appointmentCancelIntent,
                 appointmentRescheduleIntent,
-                actionDecision.action(),
-                actionDecision.appointmentId(),
-                actionDecision.roomId(),
-                actionDecision.timeText(),
                 question
         );
 
@@ -446,15 +389,15 @@ public class AssistantChatService {
         }
 
         if (appointmentIntent) {
-            return handleAppointmentIntent(question, conversationId, currentState, actionDecision);
+            return handleAppointmentIntent(question, conversationId, currentState, parsedAppointmentTime);
         }
 
         if (appointmentCancelIntent) {
-            return handleAppointmentCancelIntent(question, conversationId, currentState, actionDecision);
+            return handleAppointmentCancelIntent(question, conversationId, currentState);
         }
 
         if (appointmentRescheduleIntent) {
-            return handleAppointmentRescheduleIntent(question, conversationId, currentState, actionDecision);
+            return handleAppointmentRescheduleIntent(question, conversationId, currentState, parsedAppointmentTime);
         }
 
         return null;
@@ -506,7 +449,7 @@ public class AssistantChatService {
                 selectedAppointment == null ? null : selectedAppointment.appointmentId(),
                 selectedAppointment == null ? null : selectedAppointment.label(),
                 null,
-                currentState == null ? List.of() : safeCandidateRooms(currentState)
+                currentState == null ? List.of() : conversationSupport.safeCandidateRooms(currentState)
         );
         assistantTaskStateStore.save(conversationId, bootstrappedState);
         log.info(
@@ -520,124 +463,10 @@ public class AssistantChatService {
         return bootstrappedState;
     }
 
-    private AppointmentActionDecision analyzeAppointmentAction(String question, AssistantTaskState currentState) {
-        if (!shouldAnalyzeAppointmentAction(question, currentState)) {
-            return AppointmentActionDecision.none();
-        }
-
-        AppointmentActionAnalyzer analyzer = appointmentActionAnalyzerProvider.getIfAvailable();
-        if (analyzer == null) {
-            return AppointmentActionDecision.none();
-        }
-
-        try {
-            String raw = analyzer.analyze(buildAppointmentActionAnalyzerInput(question, currentState));
-            AppointmentActionDecision decision = parseAppointmentActionDecision(raw);
-            return decision == null ? AppointmentActionDecision.none() : decision;
-        } catch (Exception e) {
-            log.warn("Failed to analyze appointment action with LLM", e);
-            return AppointmentActionDecision.none();
-        }
-    }
-
-    private boolean shouldAnalyzeAppointmentAction(String question, AssistantTaskState currentState) {
-        if (!StringUtils.hasText(question)) {
-            return false;
-        }
-        if (looksLikeAppointmentManagementQuestion(question)) {
-            return true;
-        }
-        if (currentState == null || !StringUtils.hasText(currentState.taskType())) {
-            return false;
-        }
-        return List.of(
-                "ROOM_DETAIL",
-                "APPOINTMENT_INTENT",
-                "APPOINTMENT_CONFIRMING",
-                "APPOINTMENT_QUERY",
-                "APPOINTMENT_CREATED",
-                "APPOINTMENT_CANCEL_CONFIRMING",
-                "APPOINTMENT_RESCHEDULE_INTENT",
-                "APPOINTMENT_RESCHEDULE_CONFIRMING",
-                "APPOINTMENT_RESCHEDULED"
-        ).contains(currentState.taskType());
-    }
-
-    private String buildAppointmentActionAnalyzerInput(String question, AssistantTaskState currentState) {
-        AppointmentQueryContext appointmentQueryContext = isLoggedIn()
-                ? loadAppointmentQueryContext()
-                : new AppointmentQueryContext(List.of());
-        StringBuilder appointmentSection = new StringBuilder();
-        List<AppointmentSelection> waitingAppointments = appointmentQueryContext.waitingAppointments();
-        if (waitingAppointments == null || waitingAppointments.isEmpty()) {
-            appointmentSection.append("none");
-        } else {
-            for (int i = 0; i < waitingAppointments.size(); i++) {
-                AppointmentSelection selection = waitingAppointments.get(i);
-                appointmentSection.append(i + 1)
-                        .append(". ")
-                        .append(selection.label())
-                        .append(System.lineSeparator());
-            }
-        }
-
-        return """
-                now=%s
-                timezone=%s
-                loggedIn=%s
-                currentTaskType=%s
-                currentTaskStatus=%s
-                selectedRoomId=%s
-                selectedRoomTitle=%s
-                selectedAppointmentId=%s
-                selectedAppointmentLabel=%s
-                proposedAppointmentTime=%s
-                waitingAppointments=
-                %s
-                userMessage=%s
-                """.formatted(
-                java.time.ZonedDateTime.now(ZONE_ID),
-                ZONE_ID,
-                isLoggedIn(),
-                currentState == null ? "" : blankToEmpty(currentState.taskType()),
-                currentState == null ? "" : blankToEmpty(currentState.taskStatus()),
-                currentState == null || currentState.selectedRoomId() == null ? "" : currentState.selectedRoomId(),
-                currentState == null ? "" : blankToEmpty(currentState.selectedRoomTitle()),
-                currentState == null || currentState.selectedAppointmentId() == null ? "" : currentState.selectedAppointmentId(),
-                currentState == null ? "" : blankToEmpty(currentState.selectedAppointmentLabel()),
-                currentState == null ? "" : blankToEmpty(currentState.proposedAppointmentTime()),
-                appointmentSection,
-                question
-        );
-    }
-
-    private AppointmentActionDecision parseAppointmentActionDecision(String raw) {
-        if (!StringUtils.hasText(raw)) {
-            return AppointmentActionDecision.none();
-        }
-        String cleaned = raw.trim();
-        if (cleaned.startsWith("```")) {
-            cleaned = cleaned.replaceFirst("^```(?:json)?\\s*", "");
-            cleaned = cleaned.replaceFirst("\\s*```$", "");
-        }
-        JsonNode node = parseToolResult(cleaned);
-        if (node == null || !node.isObject()) {
-            return AppointmentActionDecision.none();
-        }
-        return new AppointmentActionDecision(
-                getTextValue(node, "action"),
-                getLongValue(node, "appointmentId"),
-                getLongValue(node, "roomId"),
-                getTextValue(node, "timeText"),
-                node.path("needsSchedule").asBoolean(false),
-                node.path("needsAppointmentSelection").asBoolean(false)
-        );
-    }
-
     private AssistantChatResponseVo handleAppointmentIntent(String question,
                                                             String conversationId,
                                                             AssistantTaskState currentState,
-                                                            AppointmentActionDecision actionDecision) {
+                                                            AppointmentTimeParser.ParsedAppointmentTime parsedAppointmentTime) {
         if (!isLoggedIn()) {
             AssistantTaskState nextState = new AssistantTaskState(
                     "APPOINTMENT_INTENT",
@@ -646,10 +475,10 @@ public class AssistantChatService {
                     currentState.selectedRoomTitle(),
                     currentState.selectedApartmentId(),
                     null,
-                    safeCandidateRooms(currentState)
+                    conversationSupport.safeCandidateRooms(currentState)
             );
             assistantTaskStateStore.save(conversationId, nextState);
-            return buildLocalResponse(
+            return conversationSupport.buildLocalResponse(
                     conversationId,
                     "当前你还没有登录，暂时不能直接创建预约。请先登录，登录后告诉我预约时间，我会继续帮你安排看房。",
                     "agent",
@@ -659,7 +488,6 @@ public class AssistantChatService {
             );
         }
 
-        AppointmentTimeParser.ParsedAppointmentTime parsedAppointmentTime = parseAppointmentTime(actionDecision.timeText(), question);
         if (parsedAppointmentTime == null) {
             return buildAppointmentIntentResponse(
                     conversationId,
@@ -681,10 +509,10 @@ public class AssistantChatService {
                     currentState.selectedRoomTitle(),
                     currentState.selectedApartmentId(),
                     null,
-                    safeCandidateRooms(currentState)
+                    conversationSupport.safeCandidateRooms(currentState)
             );
             assistantTaskStateStore.save(conversationId, revertedState);
-            return buildLocalResponse(
+            return conversationSupport.buildLocalResponse(
                     conversationId,
                     "好的，已经取消这次预约操作。如果你想换个时间，可以直接告诉我新的预约时间。",
                     "agent",
@@ -711,10 +539,10 @@ public class AssistantChatService {
                     currentState.selectedRoomTitle(),
                     currentState.selectedApartmentId(),
                     null,
-                    safeCandidateRooms(currentState)
+                    conversationSupport.safeCandidateRooms(currentState)
             );
             assistantTaskStateStore.save(conversationId, nextState);
-            return buildLocalResponse(
+            return conversationSupport.buildLocalResponse(
                     conversationId,
                     "当前你还没有登录，暂时不能创建预约。请先登录，登录后我会继续帮你处理。",
                     "agent",
@@ -729,8 +557,7 @@ public class AssistantChatService {
 
     private AssistantChatResponseVo handleAppointmentCancelIntent(String question,
                                                                   String conversationId,
-                                                                  AssistantTaskState currentState,
-                                                                  AppointmentActionDecision actionDecision) {
+                                                                  AssistantTaskState currentState) {
         if (!isLoggedIn()) {
             AssistantTaskState nextState = new AssistantTaskState(
                     "APPOINTMENT_QUERY",
@@ -741,10 +568,10 @@ public class AssistantChatService {
                     currentState.selectedAppointmentId(),
                     currentState.selectedAppointmentLabel(),
                     currentState.proposedAppointmentTime(),
-                    safeCandidateRooms(currentState)
+                    conversationSupport.safeCandidateRooms(currentState)
             );
             assistantTaskStateStore.save(conversationId, nextState);
-            return buildLocalResponse(
+            return conversationSupport.buildLocalResponse(
                     conversationId,
                     "当前你还没有登录，暂时不能取消预约。请先登录后再试。",
                     "agent",
@@ -754,9 +581,9 @@ public class AssistantChatService {
             );
         }
 
-        AppointmentSelection appointmentSelection = resolveAppointmentSelection(actionDecision, question, currentState);
+        AppointmentSelection appointmentSelection = resolveAppointmentSelection(question, currentState);
         if (appointmentSelection == null || appointmentSelection.appointmentId() == null) {
-            return buildLocalResponse(
+            return conversationSupport.buildLocalResponse(
                     conversationId,
                     "我还没确定你想取消哪一条预约。你可以直接说“取消预约13”或“取消最新预约”。",
                     "agent",
@@ -782,10 +609,10 @@ public class AssistantChatService {
                     currentState.selectedAppointmentId(),
                     currentState.selectedAppointmentLabel(),
                     null,
-                    safeCandidateRooms(currentState)
+                    conversationSupport.safeCandidateRooms(currentState)
             );
             assistantTaskStateStore.save(conversationId, nextState);
-            return buildLocalResponse(
+            return conversationSupport.buildLocalResponse(
                     conversationId,
                     "好的，这次我先不取消预约。如果你想继续处理其他预约，直接告诉我即可。",
                     "agent",
@@ -809,10 +636,10 @@ public class AssistantChatService {
                     currentState.selectedAppointmentId(),
                     currentState.selectedAppointmentLabel(),
                     null,
-                    safeCandidateRooms(currentState)
+                    conversationSupport.safeCandidateRooms(currentState)
             );
             assistantTaskStateStore.save(conversationId, nextState);
-            return buildLocalResponse(
+            return conversationSupport.buildLocalResponse(
                     conversationId,
                     "当前你还没有登录，暂时不能取消预约。请先登录后再试。",
                     "agent",
@@ -828,7 +655,7 @@ public class AssistantChatService {
     private AssistantChatResponseVo handleAppointmentRescheduleIntent(String question,
                                                                       String conversationId,
                                                                       AssistantTaskState currentState,
-                                                                      AppointmentActionDecision actionDecision) {
+                                                                      AppointmentTimeParser.ParsedAppointmentTime parsedAppointmentTime) {
         if (!isLoggedIn()) {
             AssistantTaskState nextState = new AssistantTaskState(
                     "APPOINTMENT_QUERY",
@@ -839,10 +666,10 @@ public class AssistantChatService {
                     currentState.selectedAppointmentId(),
                     currentState.selectedAppointmentLabel(),
                     currentState.proposedAppointmentTime(),
-                    safeCandidateRooms(currentState)
+                    conversationSupport.safeCandidateRooms(currentState)
             );
             assistantTaskStateStore.save(conversationId, nextState);
-            return buildLocalResponse(
+            return conversationSupport.buildLocalResponse(
                     conversationId,
                     "当前你还没有登录，暂时不能改约。请先登录后再试。",
                     "agent",
@@ -852,9 +679,9 @@ public class AssistantChatService {
             );
         }
 
-        AppointmentSelection appointmentSelection = resolveAppointmentSelection(actionDecision, question, currentState);
+        AppointmentSelection appointmentSelection = resolveAppointmentSelection(question, currentState);
         if (appointmentSelection == null || appointmentSelection.appointmentId() == null) {
-            return buildLocalResponse(
+            return conversationSupport.buildLocalResponse(
                     conversationId,
                     "我还没确定你想修改哪一条预约。你可以直接说“把预约13改到明天下午”或“改约最新预约”。",
                     "agent",
@@ -864,7 +691,6 @@ public class AssistantChatService {
             );
         }
 
-        AppointmentTimeParser.ParsedAppointmentTime parsedAppointmentTime = parseAppointmentTime(actionDecision.timeText(), question);
         if (parsedAppointmentTime == null) {
             AssistantTaskState nextState = new AssistantTaskState(
                     "APPOINTMENT_RESCHEDULE_INTENT",
@@ -875,10 +701,10 @@ public class AssistantChatService {
                     appointmentSelection.appointmentId(),
                     appointmentSelection.label(),
                     null,
-                    safeCandidateRooms(currentState)
+                    conversationSupport.safeCandidateRooms(currentState)
             );
             assistantTaskStateStore.save(conversationId, nextState);
-            return buildLocalResponse(
+            return conversationSupport.buildLocalResponse(
                     conversationId,
                     "可以，我来帮你改约 %s。请告诉我新的预约时间，例如“明天下午”或“2026-04-10 15:00”。"
                             .formatted(appointmentSelection.label()),
@@ -910,10 +736,10 @@ public class AssistantChatService {
                     currentState.selectedAppointmentId(),
                     currentState.selectedAppointmentLabel(),
                     null,
-                    safeCandidateRooms(currentState)
+                    conversationSupport.safeCandidateRooms(currentState)
             );
             assistantTaskStateStore.save(conversationId, nextState);
-            return buildLocalResponse(
+            return conversationSupport.buildLocalResponse(
                     conversationId,
                     "好的，这次先不改约，原预约时间保持不变。",
                     "agent",
@@ -947,10 +773,10 @@ public class AssistantChatService {
                     currentState.selectedAppointmentId(),
                     currentState.selectedAppointmentLabel(),
                     currentState.proposedAppointmentTime(),
-                    safeCandidateRooms(currentState)
+                    conversationSupport.safeCandidateRooms(currentState)
             );
             assistantTaskStateStore.save(conversationId, nextState);
-            return buildLocalResponse(
+            return conversationSupport.buildLocalResponse(
                     conversationId,
                     "当前你还没有登录，暂时不能改约。请先登录后再试。",
                     "agent",
@@ -973,10 +799,10 @@ public class AssistantChatService {
                 currentState.selectedRoomTitle(),
                 currentState.selectedApartmentId(),
                 null,
-                safeCandidateRooms(currentState)
+                conversationSupport.safeCandidateRooms(currentState)
         );
         assistantTaskStateStore.save(conversationId, nextState);
-        return buildLocalResponse(conversationId, reply, "agent", List.of(), List.of(), nextState);
+        return conversationSupport.buildLocalResponse(conversationId, reply, "agent", List.of(), List.of(), nextState);
     }
 
     private AssistantChatResponseVo buildAppointmentConfirmResponse(String conversationId,
@@ -991,13 +817,13 @@ public class AssistantChatService {
                 currentState.selectedAppointmentId(),
                 currentState.selectedAppointmentLabel(),
                 appointmentTimeText,
-                safeCandidateRooms(currentState)
+                conversationSupport.safeCandidateRooms(currentState)
         );
         assistantTaskStateStore.save(conversationId, nextState);
         String roomTitle = StringUtils.hasText(currentState.selectedRoomTitle()) ? currentState.selectedRoomTitle() : "当前房源";
         String reply = "我准备为你预约 **%s**，预约时间是 **%s**。如果确认，请回复“确认”；如果想修改时间，直接告诉我新的预约时间即可。"
                 .formatted(roomTitle, appointmentTimeText);
-        return buildLocalResponse(conversationId, reply, "agent", List.of(), List.of(), nextState);
+        return conversationSupport.buildLocalResponse(conversationId, reply, "agent", List.of(), List.of(), nextState);
     }
 
     private AssistantChatResponseVo buildAppointmentCancelConfirmResponse(String conversationId,
@@ -1012,12 +838,12 @@ public class AssistantChatService {
                 appointmentSelection.appointmentId(),
                 appointmentSelection.label(),
                 null,
-                safeCandidateRooms(currentState)
+                conversationSupport.safeCandidateRooms(currentState)
         );
         assistantTaskStateStore.save(conversationId, nextState);
         String reply = "我准备帮你取消 **%s**。如果确认取消，请回复“确认”；如果先不取消，回复“保留”或“取消”。"
                 .formatted(appointmentSelection.label());
-        return buildLocalResponse(conversationId, reply, "agent", List.of(), List.of(), nextState);
+        return conversationSupport.buildLocalResponse(conversationId, reply, "agent", List.of(), List.of(), nextState);
     }
 
     private AssistantChatResponseVo buildAppointmentRescheduleConfirmResponse(String conversationId,
@@ -1033,12 +859,12 @@ public class AssistantChatService {
                 appointmentSelection.appointmentId(),
                 appointmentSelection.label(),
                 appointmentTimeText,
-                safeCandidateRooms(currentState)
+                conversationSupport.safeCandidateRooms(currentState)
         );
         assistantTaskStateStore.save(conversationId, nextState);
         String reply = "我准备把 **%s** 改约到 **%s**。如果确认修改，请回复“确认”；如果想换个时间，直接告诉我新的预约时间即可。"
                 .formatted(appointmentSelection.label(), appointmentTimeText);
-        return buildLocalResponse(conversationId, reply, "agent", List.of(), List.of(), nextState);
+        return conversationSupport.buildLocalResponse(conversationId, reply, "agent", List.of(), List.of(), nextState);
     }
 
     private AssistantChatResponseVo createAppointmentFromState(String conversationId, AssistantTaskState currentState) {
@@ -1052,25 +878,25 @@ public class AssistantChatService {
                 currentState.proposedAppointmentTime(),
                 null
         );
-        JsonNode resultNode = parseToolResult(toolResult);
+        JsonNode resultNode = conversationSupport.parseToolResult(toolResult);
         boolean success = resultNode != null && resultNode.hasNonNull("appointmentId");
 
         AssistantToolExecutionVo toolExecution = new AssistantToolExecutionVo(
                 "createRoomAppointment",
                 toolArguments,
                 !success,
-                summarizeToolResult(toolResult)
+                conversationSupport.summarizeToolResult(toolResult)
         );
 
         AssistantTaskState nextState;
         String reply;
         if (success) {
-            Long roomId = getLongValue(resultNode, "roomId");
-            Long apartmentId = getLongValue(resultNode, "apartmentId");
-            Long appointmentId = getLongValue(resultNode, "appointmentId");
-            String roomTitle = getTextValue(resultNode, "title");
-            String appointmentTime = getTextValue(resultNode, "appointmentTime");
-            String appointmentLabel = buildAppointmentLabel(
+            Long roomId = conversationSupport.getLongValue(resultNode, "roomId");
+            Long apartmentId = conversationSupport.getLongValue(resultNode, "apartmentId");
+            Long appointmentId = conversationSupport.getLongValue(resultNode, "appointmentId");
+            String roomTitle = conversationSupport.getTextValue(resultNode, "title");
+            String appointmentTime = conversationSupport.getTextValue(resultNode, "appointmentTime");
+            String appointmentLabel = conversationSupport.buildAppointmentLabel(
                     appointmentId,
                     StringUtils.hasText(roomTitle) ? roomTitle : currentState.selectedRoomTitle(),
                     appointmentTime
@@ -1084,10 +910,10 @@ public class AssistantChatService {
                     appointmentId,
                     appointmentLabel,
                     appointmentTime,
-                    safeCandidateRooms(currentState)
+                    conversationSupport.safeCandidateRooms(currentState)
             );
-            reply = StringUtils.hasText(getTextValue(resultNode, "summary"))
-                    ? getTextValue(resultNode, "summary")
+            reply = StringUtils.hasText(conversationSupport.getTextValue(resultNode, "summary"))
+                    ? conversationSupport.getTextValue(resultNode, "summary")
                     : "预约已经创建成功，你可以在“我的预约”里查看详情。";
         } else {
             nextState = new AssistantTaskState(
@@ -1099,15 +925,15 @@ public class AssistantChatService {
                     null,
                     null,
                     null,
-                    safeCandidateRooms(currentState)
+                    conversationSupport.safeCandidateRooms(currentState)
             );
-            reply = resultNode != null && StringUtils.hasText(getTextValue(resultNode, "summary"))
-                    ? getTextValue(resultNode, "summary")
+            reply = resultNode != null && StringUtils.hasText(conversationSupport.getTextValue(resultNode, "summary"))
+                    ? conversationSupport.getTextValue(resultNode, "summary")
                     : "当前没有成功创建预约，请稍后再试或换一个时间。";
         }
 
         assistantTaskStateStore.save(conversationId, nextState);
-        return buildLocalResponse(
+        return conversationSupport.buildLocalResponse(
                 conversationId,
                 reply,
                 success ? "tool" : "agent",
@@ -1120,7 +946,7 @@ public class AssistantChatService {
     private AssistantChatResponseVo cancelAppointmentFromState(String conversationId, AssistantTaskState currentState) {
         String toolArguments = "{\"appointmentId\":%d}".formatted(currentState.selectedAppointmentId());
         String toolResult = rentalAssistantTools.cancelAppointment(currentState.selectedAppointmentId());
-        JsonNode resultNode = parseToolResult(toolResult);
+        JsonNode resultNode = conversationSupport.parseToolResult(toolResult);
         Integer appointmentStatusCode = resultNode != null && resultNode.hasNonNull("appointmentStatusCode")
                 ? resultNode.get("appointmentStatusCode").asInt()
                 : null;
@@ -1133,15 +959,15 @@ public class AssistantChatService {
                 "cancelAppointment",
                 toolArguments,
                 !success,
-                summarizeToolResult(toolResult)
+                conversationSupport.summarizeToolResult(toolResult)
         );
 
         String appointmentLabel = currentState.selectedAppointmentLabel();
         if (resultNode != null) {
-            String apartmentName = getTextValue(resultNode, "apartmentName");
-            String appointmentTime = getTextValue(resultNode, "appointmentTime");
+            String apartmentName = conversationSupport.getTextValue(resultNode, "apartmentName");
+            String appointmentTime = conversationSupport.getTextValue(resultNode, "appointmentTime");
             if (StringUtils.hasText(apartmentName) || StringUtils.hasText(appointmentTime)) {
-                appointmentLabel = buildAppointmentLabel(
+                appointmentLabel = conversationSupport.buildAppointmentLabel(
                         currentState.selectedAppointmentId(),
                         apartmentName,
                         appointmentTime
@@ -1159,7 +985,7 @@ public class AssistantChatService {
                 currentState.selectedAppointmentId(),
                 appointmentLabel,
                 null,
-                safeCandidateRooms(currentState)
+                conversationSupport.safeCandidateRooms(currentState)
         )
                 : new AssistantTaskState(
                 "APPOINTMENT_QUERY",
@@ -1170,14 +996,14 @@ public class AssistantChatService {
                 currentState.selectedAppointmentId(),
                 appointmentLabel,
                 null,
-                safeCandidateRooms(currentState)
+                conversationSupport.safeCandidateRooms(currentState)
         );
 
         assistantTaskStateStore.save(conversationId, nextState);
-        String reply = resultNode != null && StringUtils.hasText(getTextValue(resultNode, "summary"))
-                ? getTextValue(resultNode, "summary")
-                : success ? "已为你取消预约。" : "当前没有成功取消预约，请稍后再试。";
-        return buildLocalResponse(
+        String reply = resultNode != null && StringUtils.hasText(conversationSupport.getTextValue(resultNode, "summary"))
+                ? conversationSupport.getTextValue(resultNode, "summary")
+                : success ? "预约已经取消成功。" : "当前没有成功取消预约，请稍后再试。";
+        return conversationSupport.buildLocalResponse(
                 conversationId,
                 reply,
                 success ? "tool" : "agent",
@@ -1196,7 +1022,7 @@ public class AssistantChatService {
                 currentState.selectedAppointmentId(),
                 currentState.proposedAppointmentTime()
         );
-        JsonNode resultNode = parseToolResult(toolResult);
+        JsonNode resultNode = conversationSupport.parseToolResult(toolResult);
         Integer appointmentStatusCode = resultNode != null && resultNode.hasNonNull("appointmentStatusCode")
                 ? resultNode.get("appointmentStatusCode").asInt()
                 : null;
@@ -1204,25 +1030,25 @@ public class AssistantChatService {
                 && resultNode.hasNonNull("appointmentId")
                 && appointmentStatusCode != null
                 && appointmentStatusCode == 1
-                && StringUtils.hasText(getTextValue(resultNode, "appointmentTime"));
+                && StringUtils.hasText(conversationSupport.getTextValue(resultNode, "appointmentTime"));
 
         AssistantToolExecutionVo toolExecution = new AssistantToolExecutionVo(
                 "rescheduleAppointment",
                 toolArguments,
                 !success,
-                summarizeToolResult(toolResult)
+                conversationSupport.summarizeToolResult(toolResult)
         );
 
         String appointmentLabel = currentState.selectedAppointmentLabel();
         String appointmentTime = currentState.proposedAppointmentTime();
         if (resultNode != null) {
-            String apartmentName = getTextValue(resultNode, "apartmentName");
-            String updatedAppointmentTime = getTextValue(resultNode, "appointmentTime");
+            String apartmentName = conversationSupport.getTextValue(resultNode, "apartmentName");
+            String updatedAppointmentTime = conversationSupport.getTextValue(resultNode, "appointmentTime");
             if (StringUtils.hasText(updatedAppointmentTime)) {
                 appointmentTime = updatedAppointmentTime;
             }
             if (StringUtils.hasText(apartmentName) || StringUtils.hasText(appointmentTime)) {
-                appointmentLabel = buildAppointmentLabel(
+                appointmentLabel = conversationSupport.buildAppointmentLabel(
                         currentState.selectedAppointmentId(),
                         apartmentName,
                         appointmentTime
@@ -1240,7 +1066,7 @@ public class AssistantChatService {
                 currentState.selectedAppointmentId(),
                 appointmentLabel,
                 appointmentTime,
-                safeCandidateRooms(currentState)
+                conversationSupport.safeCandidateRooms(currentState)
         )
                 : new AssistantTaskState(
                 "APPOINTMENT_QUERY",
@@ -1251,36 +1077,20 @@ public class AssistantChatService {
                 currentState.selectedAppointmentId(),
                 appointmentLabel,
                 null,
-                safeCandidateRooms(currentState)
+                conversationSupport.safeCandidateRooms(currentState)
         );
 
         assistantTaskStateStore.save(conversationId, nextState);
-        String reply = resultNode != null && StringUtils.hasText(getTextValue(resultNode, "summary"))
-                ? getTextValue(resultNode, "summary")
+        String reply = resultNode != null && StringUtils.hasText(conversationSupport.getTextValue(resultNode, "summary"))
+                ? conversationSupport.getTextValue(resultNode, "summary")
                 : success ? "已为你修改预约时间。" : "当前没有成功修改预约时间，请稍后再试。";
-        return buildLocalResponse(
+        return conversationSupport.buildLocalResponse(
                 conversationId,
                 reply,
                 success ? "tool" : "agent",
                 List.of(toolExecution),
                 List.of(),
                 nextState
-        );
-    }
-
-    private AssistantChatResponseVo buildLocalResponse(String conversationId,
-                                                       String reply,
-                                                       String answerSource,
-                                                       List<AssistantToolExecutionVo> toolExecutions,
-                                                       List<AssistantKnowledgeSourceVo> knowledgeSources,
-                                                       AssistantTaskState taskState) {
-        return conversationSupport.buildLocalResponse(
-                conversationId,
-                reply,
-                answerSource,
-                toolExecutions,
-                knowledgeSources,
-                taskState
         );
     }
 
@@ -1304,42 +1114,9 @@ public class AssistantChatService {
         return null;
     }
 
-    private AppointmentSelection resolveAppointmentSelection(AppointmentActionDecision actionDecision,
-                                                             String question,
-                                                             AssistantTaskState currentState) {
-        if (actionDecision != null && actionDecision.appointmentId() != null) {
-            if (currentState != null
-                    && actionDecision.appointmentId().equals(currentState.selectedAppointmentId())
-                    && StringUtils.hasText(currentState.selectedAppointmentLabel())) {
-                return new AppointmentSelection(actionDecision.appointmentId(), currentState.selectedAppointmentLabel());
-            }
-
-            AppointmentQueryContext appointmentQueryContext = isLoggedIn()
-                    ? loadAppointmentQueryContext()
-                    : new AppointmentQueryContext(List.of());
-            AppointmentSelection selectionFromList = appointmentQueryContext.waitingAppointments().stream()
-                    .filter(item -> actionDecision.appointmentId().equals(item.appointmentId()))
-                    .findFirst()
-                    .orElse(null);
-            if (selectionFromList != null) {
-                return selectionFromList;
-            }
-            return new AppointmentSelection(actionDecision.appointmentId(), "预约ID " + actionDecision.appointmentId());
-        }
-        return resolveAppointmentSelection(question, currentState);
-    }
-
-    private AppointmentTimeParser.ParsedAppointmentTime parseAppointmentTime(String preferredTimeText, String fallbackQuestion) {
-        AppointmentTimeParser.ParsedAppointmentTime parsed = AppointmentTimeParser.parse(preferredTimeText, ZONE_ID);
-        if (parsed != null) {
-            return parsed;
-        }
-        return AppointmentTimeParser.parse(fallbackQuestion, ZONE_ID);
-    }
-
     private AppointmentQueryContext loadAppointmentQueryContext() {
         try {
-            JsonNode resultNode = parseToolResult(rentalAssistantTools.getMyAppointments());
+            JsonNode resultNode = conversationSupport.parseToolResult(rentalAssistantTools.getMyAppointments());
             if (resultNode == null) {
                 return new AppointmentQueryContext(List.of());
             }
@@ -1351,7 +1128,7 @@ public class AssistantChatService {
 
             List<AppointmentSelection> waitingAppointments = new ArrayList<>();
             for (JsonNode itemNode : itemsNode) {
-                Long appointmentId = getLongValue(itemNode, "appointmentId");
+                Long appointmentId = conversationSupport.getLongValue(itemNode, "appointmentId");
                 Integer appointmentStatusCode = itemNode.hasNonNull("appointmentStatusCode")
                         ? itemNode.get("appointmentStatusCode").asInt()
                         : null;
@@ -1360,10 +1137,10 @@ public class AssistantChatService {
                 }
                 waitingAppointments.add(new AppointmentSelection(
                         appointmentId,
-                        buildAppointmentLabel(
+                        conversationSupport.buildAppointmentLabel(
                                 appointmentId,
-                                getTextValue(itemNode, "apartmentName"),
-                                getTextValue(itemNode, "appointmentTime")
+                                conversationSupport.getTextValue(itemNode, "apartmentName"),
+                                conversationSupport.getTextValue(itemNode, "appointmentTime")
                         )
                 ));
             }
@@ -1383,20 +1160,6 @@ public class AssistantChatService {
             return Long.parseLong(matcher.group(1));
         }
         return null;
-    }
-
-    private String buildAppointmentLabel(Long appointmentId, String apartmentName, String appointmentTime) {
-        List<String> parts = new ArrayList<>();
-        if (appointmentId != null) {
-            parts.add("预约ID " + appointmentId);
-        }
-        if (StringUtils.hasText(apartmentName)) {
-            parts.add(apartmentName.trim());
-        }
-        if (StringUtils.hasText(appointmentTime)) {
-            parts.add(appointmentTime.trim());
-        }
-        return parts.isEmpty() ? "当前预约" : String.join(" / ", parts);
     }
 
     private boolean looksLikeAppointmentManagementQuestion(String question) {
@@ -1530,80 +1293,20 @@ public class AssistantChatService {
         return List.of("取消", "取消预约", "不用了", "算了", "先不预约", "保留").contains(normalized);
     }
 
-    private List<AssistantTaskState.RoomCandidate> safeCandidateRooms(AssistantTaskState currentState) {
-        return conversationSupport.safeCandidateRooms(currentState);
-    }
-
     private Result<String> invokeAssistantWithRecovery(RentalAssistant rentalAssistant,
                                                        String conversationId,
-                                                       AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult) {
+                                                       String question) {
         try {
-            Result<String> assistantResult = rentalAssistant.chat(conversationId, orchestrationResult.question());
-            enforceToolExecutionIfRequired(orchestrationResult, assistantResult);
-            return assistantResult;
+            return rentalAssistant.chat(conversationId, question);
         } catch (Exception firstException) {
             if (!isBrokenToolCallMemory(firstException) || !clearConversationMemory(conversationId)) {
                 throw firstException;
             }
 
             log.warn("Assistant conversation memory was inconsistent and has been cleared, conversationId={}", conversationId, firstException);
-            Result<String> assistantResult = rentalAssistant.chat(conversationId, orchestrationResult.question());
-            enforceToolExecutionIfRequired(orchestrationResult, assistantResult);
-            return assistantResult;
+            return rentalAssistant.chat(conversationId, question);
         }
     }
-
-
-    private void enforceToolExecutionIfRequired(AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult,
-                                                Result<String> assistantResult) {
-        if (!requiresToolExecution(orchestrationResult)) {
-            return;
-        }
-        if (assistantResult != null
-                && assistantResult.toolExecutions() != null
-                && !assistantResult.toolExecutions().isEmpty()) {
-            return;
-        }
-        log.warn(
-                "Assistant required tool execution but none occurred, intent={}, suggestedTool={}, originalQuestion={}",
-                orchestrationResult == null ? "" : orchestrationResult.intent(),
-                orchestrationResult == null ? "" : orchestrationResult.suggestedTool(),
-                extractOriginalQuestion(orchestrationResult)
-        );
-        throw new LeaseException(ResultCodeEnum.SERVICE_ERROR.getCode(), "本次业务请求没有触发平台工具调用，请稍后重试");
-    }
-
-    private void enforceToolExecutionIfRequired(AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult,
-                                                List<AssistantToolExecutionVo> toolExecutions) {
-        if (!requiresToolExecution(orchestrationResult)) {
-            return;
-        }
-        if (toolExecutions != null && !toolExecutions.isEmpty()) {
-            return;
-        }
-        log.warn(
-                "Assistant required tool execution but none occurred in streaming mode, intent={}, suggestedTool={}, originalQuestion={}",
-                orchestrationResult == null ? "" : orchestrationResult.intent(),
-                orchestrationResult == null ? "" : orchestrationResult.suggestedTool(),
-                extractOriginalQuestion(orchestrationResult)
-        );
-        throw new LeaseException(ResultCodeEnum.SERVICE_ERROR.getCode(), "本次业务请求没有触发平台工具调用，请稍后重试");
-    }
-
-    private boolean requiresToolExecution(AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult) {
-        return orchestrationResult != null && orchestrationResult.orchestrated();
-    }
-
-    private String extractOriginalQuestion(AssistantWorkflowOrchestrator.OrchestrationResult orchestrationResult) {
-        if (orchestrationResult == null) {
-            return "";
-        }
-        if (StringUtils.hasText(orchestrationResult.originalQuestion())) {
-            return orchestrationResult.originalQuestion();
-        }
-        return blankToEmpty(orchestrationResult.question());
-    }
-
 
     private AssistantToolExecutionVo toToolExecutionVo(ToolExecution toolExecution) {
         String toolName = toolExecution == null || toolExecution.request() == null
@@ -1617,18 +1320,6 @@ public class AssistantChatService {
         return new AssistantToolExecutionVo(toolName, arguments, failed, resultSummary);
     }
 
-
-    private JsonNode parseToolResult(String toolResult) {
-        return conversationSupport.parseToolResult(toolResult);
-    }
-
-    private Long getLongValue(JsonNode node, String fieldName) {
-        return conversationSupport.getLongValue(node, fieldName);
-    }
-
-    private String getTextValue(JsonNode node, String fieldName) {
-        return conversationSupport.getTextValue(node, fieldName);
-    }
 
     private void emitToolEvents(SseEmitter emitter, AssistantChatResponseVo response) {
         if (response.getToolExecutions() == null || response.getToolExecutions().isEmpty()) {
@@ -1677,10 +1368,6 @@ public class AssistantChatService {
                     toolExecution.getResultSummary()
             );
         }
-    }
-
-    private String summarizeToolResult(String toolResult) {
-        return conversationSupport.summarizeToolResult(toolResult);
     }
 
     private void emitErrorAndComplete(SseEmitter emitter, Throwable throwable, String conversationId) {
@@ -1836,33 +1523,7 @@ public class AssistantChatService {
         }
     }
 
-    private record AppointmentActionDecision(String action,
-                                             Long appointmentId,
-                                             Long roomId,
-                                             String timeText,
-                                             boolean needsSchedule,
-                                             boolean needsAppointmentSelection) {
-        private static AppointmentActionDecision none() {
-            return new AppointmentActionDecision("none", null, null, null, false, false);
-        }
-
-        private boolean isCreate() {
-            return "create".equalsIgnoreCase(action);
-        }
-
-        private boolean isCancel() {
-            return "cancel".equalsIgnoreCase(action);
-        }
-
-        private boolean isReschedule() {
-            return "reschedule".equalsIgnoreCase(action);
-        }
-    }
 
     private record AppointmentSelection(Long appointmentId, String label) {
     }
-
-    private record RoomSearchCriteria(String regionKeyword, BigDecimal minRent, BigDecimal maxRent) {
-    }
 }
-
