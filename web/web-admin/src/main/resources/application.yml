@@ -41,6 +41,10 @@ spring:
 mq:
   enabled: ${MQ_ENABLED:true}
 
+lease:
+  mq:
+    order-timeout-ttl-ms: ${LEASE_MQ_ORDER_TIMEOUT_TTL_MS:900000}
+
 
 # 用于打印框架生成的 sql 语句，便于调试（建议仅在开发环境开启）
 # 关掉控制台刷屏：注释掉 StdOutImpl（会输出 Preparing/Parameters/SQLStructure 等）

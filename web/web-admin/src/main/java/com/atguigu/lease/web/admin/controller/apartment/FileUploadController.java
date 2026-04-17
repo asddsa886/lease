@@ -3,10 +3,12 @@ package com.atguigu.lease.web.admin.controller.apartment;
 
 import com.atguigu.lease.common.result.Result;
 import com.atguigu.lease.web.admin.service.FileService;
+import io.minio.MinioClient;
 import io.minio.errors.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -21,6 +23,7 @@ import java.security.NoSuchAlgorithmException;
 @Tag(name = "文件管理")
 @RequestMapping("/admin/file")
 @RestController
+@ConditionalOnBean(MinioClient.class)
 public class FileUploadController {
 
     @Autowired

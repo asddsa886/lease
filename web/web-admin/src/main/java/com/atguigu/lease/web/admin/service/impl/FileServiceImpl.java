@@ -5,6 +5,7 @@ import com.atguigu.lease.web.admin.service.FileService;
 import io.minio.*;
 import io.minio.errors.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -16,6 +17,7 @@ import java.util.Date;
 import java.util.UUID;
 
 @Service
+@ConditionalOnBean(MinioClient.class)
 public class FileServiceImpl implements FileService {
 
     @Autowired
@@ -29,7 +31,10 @@ public class FileServiceImpl implements FileService {
             boolean b = minioClient.bucketExists(BucketExistsArgs.builder().bucket(minioProperties.getBucketName()).build());
             if (!b) {
                 minioClient.makeBucket(MakeBucketArgs.builder().bucket(minioProperties.getBucketName()).build());
-                minioClient.setBucketPolicy(SetBucketPolicyArgs.builder().bucket(minioProperties.getBucketName()).config(minioProperties.getBucketName()).build());
+                minioClient.setBucketPolicy(SetBucketPolicyArgs.builder()
+                        .bucket(minioProperties.getBucketName())
+                        .config(createBucketPolicyConfig(minioProperties.getBucketName()))
+                        .build());
 
 
             }

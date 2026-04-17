@@ -40,11 +40,13 @@ spring:
     publisher-returns: true
 
 mq:
-  enabled: ${MQ_ENABLED:false}
+  enabled: ${MQ_ENABLED:true}
 
 lease:
   cache:
     hot-data-enabled: ${LEASE_CACHE_HOT_DATA_ENABLED:true}
+  mq:
+    order-timeout-ttl-ms: ${LEASE_MQ_ORDER_TIMEOUT_TTL_MS:900000}
   async:
     browsing-history:
       core-pool-size: ${LEASE_ASYNC_BROWSING_HISTORY_CORE:2}

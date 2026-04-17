@@ -21,20 +21,18 @@ public enum ResultCodeEnum {
     ADMIN_CAPTCHA_CODE_ERROR(302, "验证码错误"),
     ADMIN_CAPTCHA_CODE_EXPIRED(303, "验证码已过期"),
     ADMIN_CAPTCHA_CODE_NOT_FOUND(304, "未输入验证码"),
-    ADMIN_REQUEST_TOO_FREQUENT(311, "请求过于频繁，请稍后再试"),
-
-    ADMIN_LOGIN_AUTH(305, "未登陆"),
+    ADMIN_LOGIN_AUTH(305, "未登录"),
     ADMIN_ACCOUNT_NOT_EXIST_ERROR(306, "账号不存在"),
     ADMIN_ACCOUNT_ERROR(307, "用户名或密码错误"),
     ADMIN_ACCOUNT_DISABLED_ERROR(308, "该用户已被禁用"),
     ADMIN_ACCESS_FORBIDDEN(309, "无访问权限"),
-
     ADMIN_APARTMENT_DELETE_ERROR(310, "请先删除房间"),
+    ADMIN_REQUEST_TOO_FREQUENT(311, "请求过于频繁，请稍后再试"),
 
-    APP_LOGIN_AUTH(501, "未登陆"),
-    APP_LOGIN_PHONE_EMPTY(502, "手机号码为空"),
+    APP_LOGIN_AUTH(501, "未登录"),
+    APP_LOGIN_PHONE_EMPTY(502, "手机号为空"),
     APP_LOGIN_CODE_EMPTY(503, "验证码为空"),
-    APP_SEND_SMS_TOO_OFTEN(504, "验证法发送过于频繁"),
+    APP_SEND_SMS_TOO_OFTEN(504, "验证码发送过于频繁"),
     APP_LOGIN_CODE_EXPIRED(505, "验证码已过期"),
     APP_LOGIN_CODE_ERROR(506, "验证码错误"),
     APP_ACCOUNT_DISABLED_ERROR(507, "该用户已被禁用"),
@@ -46,12 +44,14 @@ public enum ResultCodeEnum {
     APP_APARTMENT_APPOINTMENT_CONFLICT(513, "该房源该时间段已被预约，请选择其他时间"),
     APP_APPOINTMENT_STATUS_ERROR(514, "当前预约状态不支持此操作"),
     APP_APPOINTMENT_BUSY(515, "当前预约正在处理中，请稍后再试"),
+    APP_LEASE_ORDER_START_DATE_INVALID(516, "签约开始日期必须晚于当前日期"),
+    APP_LEASE_ORDER_ROOM_BUSY(517, "该房源当前已存在待支付/已支付订单或有效租约"),
+    APP_LEASE_ORDER_STATUS_ERROR(518, "当前订单状态不支持此操作"),
+    APP_LEASE_ORDER_BUSY(519, "当前订单正在处理中，请稍后再试"),
 
     TOKEN_MISSING(600, "token缺失"),
-
     TOKEN_EXPIRED(601, "token过期"),
     TOKEN_INVALID(602, "token非法");
-
 
     private final Integer code;
 

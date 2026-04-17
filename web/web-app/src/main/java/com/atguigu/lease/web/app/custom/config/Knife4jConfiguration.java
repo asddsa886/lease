@@ -38,7 +38,8 @@ public class Knife4jConfiguration {
                 .pathsToMatch(
                         "/app/history/**",
                         "/app/appointment/**",
-                        "/app/agreement/**"
+                        "/app/agreement/**",
+                        "/app/order/**"
                 )
                 .build();
     }

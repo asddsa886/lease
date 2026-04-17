@@ -62,7 +62,8 @@ public class Knife4jConfiguration {
         return GroupedOpenApi.builder().group("租赁信息管理").
                 pathsToMatch(
                         "/admin/appointment/**",
-                        "/admin/agreement/**"
+                        "/admin/agreement/**",
+                        "/admin/order/**"
                 ).build();
     }
     @Bean
