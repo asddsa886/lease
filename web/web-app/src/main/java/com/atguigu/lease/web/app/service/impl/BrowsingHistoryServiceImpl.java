@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 
 /**
  * @author liubo
- * @description 针对表【browsing_history(浏览历史)】的数据库操作Service实现
+ * @description 閽堝琛ㄣ€恇rowsing_history(娴忚鍘嗗彶)銆戠殑鏁版嵁搴撴搷浣淪ervice瀹炵幇
  * @createDate 2023-07-26 11:12:39
  */
 @Service
@@ -38,14 +38,14 @@ public class BrowsingHistoryServiceImpl extends ServiceImpl<BrowsingHistoryMappe
 
     @Override
     public IPage<HistoryItemVo> pageItem(Page<HistoryItemVo> page, Long userId) {
-        // 1) 分页只查主数据（保证分页准确）
+        // 1) 鍒嗛〉鍙煡涓绘暟鎹紙淇濊瘉鍒嗛〉鍑嗙‘锛?
         IPage<HistoryItemVo> resultPage = browsingHistoryMapper.pageItem(page, userId);
         List<HistoryItemVo> records = resultPage.getRecords();
         if (records == null || records.isEmpty()) {
             return resultPage;
         }
 
-        // 2) 批量查图片（把 N+1 变成 1 次 in 查询）
+        // 2) 鎵归噺鏌ュ浘鐗囷紙鎶?N+1 鍙樻垚 1 娆?in 鏌ヨ锛?
         List<Long> roomIdList = records.stream()
                 .map(HistoryItemVo::getRoomId)
                 .filter(Objects::nonNull)
@@ -59,7 +59,7 @@ public class BrowsingHistoryServiceImpl extends ServiceImpl<BrowsingHistoryMappe
         LambdaQueryWrapper<GraphInfo> graphQuery = new LambdaQueryWrapper<>();
         graphQuery.eq(GraphInfo::getItemType, ItemType.ROOM);
         graphQuery.in(GraphInfo::getItemId, roomIdList);
-        // 仅查询组装所需字段
+        // 浠呮煡璇㈢粍瑁呮墍闇€瀛楁
         graphQuery.select(GraphInfo::getItemId, GraphInfo::getName, GraphInfo::getUrl);
 
         List<GraphInfo> graphInfoList = graphInfoMapper.selectList(graphQuery);
@@ -73,7 +73,7 @@ public class BrowsingHistoryServiceImpl extends ServiceImpl<BrowsingHistoryMappe
                         )
                 ));
 
-        // 3) 回填到 records
+        // 3) 鍥炲～鍒?records
         for (HistoryItemVo item : records) {
             item.setRoomGraphVoList(roomIdToGraphVoList.getOrDefault(item.getRoomId(), List.of()));
         }
@@ -81,25 +81,23 @@ public class BrowsingHistoryServiceImpl extends ServiceImpl<BrowsingHistoryMappe
         return resultPage;
     }
 
-    @Async
+    @Async("browsingHistoryTaskExecutor")
     @Override
-    public void saveHistory(Long userId, Long id) {
-
-        LambdaQueryWrapper<BrowsingHistory> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(BrowsingHistory::getUserId, userId);
-        wrapper.eq(BrowsingHistory::getRoomId, id);
-
-        BrowsingHistory browsingHistory = browsingHistoryMapper.selectOne(wrapper);
-        if (browsingHistory == null) {
-            browsingHistory = new BrowsingHistory();
-            browsingHistory.setUserId(userId);
-            browsingHistory.setRoomId(id);
-            browsingHistory.setBrowseTime(new Date());
-            browsingHistoryMapper.insert(browsingHistory);
-        } else {
-            browsingHistory.setBrowseTime(new Date());
-            browsingHistoryMapper.updateById(browsingHistory);
+    public void saveHistory(Long userId, Long roomId) {
+        if (userId == null || roomId == null) {
+            return;
         }
 
+        Date browseTime = new Date();
+        int updated = browsingHistoryMapper.touchByUserIdAndRoomId(userId, roomId, browseTime);
+        if (updated > 0) {
+            return;
+        }
+
+        BrowsingHistory browsingHistory = new BrowsingHistory();
+        browsingHistory.setUserId(userId);
+        browsingHistory.setRoomId(roomId);
+        browsingHistory.setBrowseTime(browseTime);
+        browsingHistoryMapper.insert(browsingHistory);
     }
 }

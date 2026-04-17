@@ -42,4 +42,13 @@
         order by bh.browse_time desc
     </select>
 
+    <update id="touchByUserIdAndRoomId">
+        update browsing_history
+        set browse_time = #{browseTime},
+            update_time = now()
+        where is_deleted = 0
+          and user_id = #{userId}
+          and room_id = #{roomId}
+    </update>
+
 </mapper>

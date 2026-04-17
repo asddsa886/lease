@@ -1,0 +1,2 @@
+scenario,endpoint,cache_key,threads,ramp_up_sec,loop_count,synchronizing_users,samples,average_ms,median_ms,p90_ms,p95_ms,p99_ms,min_ms,max_ms,error_pct,throughput_per_sec,received_kb_per_sec,sent_kb_per_sec,notes
+cache_breakdown_validation_pass,/app/apartment/getDetailById?id=9,app:apartment:detail:9,200,1,1,200,200,581,584,638,643,653,84,663,0.00,301.2,749.48,103.54,"Deleted hotspot key first and observed only one round of apartment-detail SQL in application logs."

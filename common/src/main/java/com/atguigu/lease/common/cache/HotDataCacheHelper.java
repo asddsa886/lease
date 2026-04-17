@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -28,6 +29,9 @@ import java.util.function.Supplier;
 public class HotDataCacheHelper {
 
     private static final long DEFAULT_JITTER_SEC = 300;
+
+    @Value("${lease.cache.hot-data-enabled:true}")
+    private boolean hotDataCacheEnabled;
 
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
@@ -51,6 +55,10 @@ public class HotDataCacheHelper {
                            long ttlSec,
                            long nullTtlSec,
                            boolean cacheNull) {
+        if (!hotDataCacheEnabled) {
+            return loader.get();
+        }
+
         String cache = stringRedisTemplate.opsForValue().get(key);
         if (cache != null) {
             try {
@@ -76,6 +84,10 @@ public class HotDataCacheHelper {
      * 说明：锁只用于保护“回源加载”阶段；拿不到锁会短暂等待并重试读取缓存。
      */
     public <T> T getOrLoadWithLock(String key, TypeReference<T> typeReference, Supplier<T> loader) {
+        if (!hotDataCacheEnabled) {
+            return loader.get();
+        }
+
         String lockKey = "lock:" + key;
 
         // 1) 先尝试读缓存（快路径）

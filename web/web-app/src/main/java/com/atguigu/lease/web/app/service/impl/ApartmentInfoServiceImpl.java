@@ -57,18 +57,22 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
         }
 
         String cacheKey = RedisConstant.APP_APARTMENT_DETAIL_KEY_PREFIX + id;
-        return hotDataCacheHelper.getOrLoadWithLock(
+        ApartmentDetailVo result = hotDataCacheHelper.getOrLoadWithLock(
                 cacheKey,
                 new TypeReference<ApartmentDetailVo>() {
                 },
-                () -> loadApartmentDetailById(id)
+                () -> loadApartmentDetailOrNull(id)
         );
+        if (result == null) {
+            throw new LeaseException(ResultCodeEnum.DATA_ERROR);
+        }
+        return result;
     }
 
-    private ApartmentDetailVo loadApartmentDetailById(Long id) {
+    private ApartmentDetailVo loadApartmentDetailOrNull(Long id) {
         ApartmentInfo apartmentInfo = apartmentInfoMapper.selectById(id);
         if (apartmentInfo == null) {
-            throw new LeaseException(ResultCodeEnum.DATA_ERROR);
+            return null;
         }
 
         List<GraphVo> graphVos = graphInfoMapper.selectListByItemTypeAndId(ItemType.APARTMENT, id);
@@ -110,7 +114,6 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
         return apartmentItemVo;
     }
 }
-
 
 
 

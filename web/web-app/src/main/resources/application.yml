@@ -1,5 +1,11 @@
 server:
   port: 8081
+  tomcat:
+    threads:
+      max: 300
+      min-spare: 20
+    accept-count: 500
+    max-connections: 8192
 spring:
   datasource:
     type: com.zaxxer.hikari.HikariDataSource
@@ -11,7 +17,7 @@ spring:
       connection-timeout: 60000 #数据库连接超时时间,默认30秒
       idle-timeout: 500000 #空闲连接存活最大时间，默认600000（10分钟）
       max-lifetime: 540000 #此属性控制池中连接的最长生命周期，值0表示无限生命周期，默认1800000即30分钟
-      maximum-pool-size: 12 #连接池最大连接数，默认是10
+      maximum-pool-size: 20 #连接池最大连接数，默认是10
       minimum-idle: 10 #最小空闲连接数量
       pool-name: SPHHikariPool # 连接池名称
   jackson:
@@ -34,7 +40,16 @@ spring:
     publisher-returns: true
 
 mq:
-  enabled: ${MQ_ENABLED:true}
+  enabled: ${MQ_ENABLED:false}
+
+lease:
+  cache:
+    hot-data-enabled: ${LEASE_CACHE_HOT_DATA_ENABLED:true}
+  async:
+    browsing-history:
+      core-pool-size: ${LEASE_ASYNC_BROWSING_HISTORY_CORE:2}
+      max-pool-size: ${LEASE_ASYNC_BROWSING_HISTORY_MAX:8}
+      queue-capacity: ${LEASE_ASYNC_BROWSING_HISTORY_QUEUE:5000}
 
 springdoc:
   default-flat-param-object: true
