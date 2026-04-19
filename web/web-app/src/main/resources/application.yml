@@ -7,6 +7,28 @@ server:
     accept-count: 500
     max-connections: 8192
 spring:
+  ai:
+    model:
+      chat: ${SPRING_AI_CHAT_MODEL:openai}
+      embedding: ${SPRING_AI_EMBEDDING_MODEL:ollama}
+      image: ${SPRING_AI_IMAGE_MODEL:none}
+      moderation: ${SPRING_AI_MODERATION_MODEL:none}
+      audio:
+        speech: ${SPRING_AI_AUDIO_SPEECH_MODEL:none}
+        transcription: ${SPRING_AI_AUDIO_TRANSCRIPTION_MODEL:none}
+    openai:
+      api-key: ${SPRING_AI_OPENAI_API_KEY:}
+      base-url: ${SPRING_AI_OPENAI_BASE_URL:http://localhost:18080}
+      chat:
+        options:
+          model: ${SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL:gpt-5.4}
+          temperature: ${SPRING_AI_OPENAI_CHAT_OPTIONS_TEMPERATURE:0.2}
+    ollama:
+      base-url: ${SPRING_AI_OLLAMA_BASE_URL:http://localhost:11434}
+      embedding:
+        model: ${SPRING_AI_OLLAMA_EMBEDDING_MODEL:qwen3-embedding:0.6b}
+        options:
+          model: ${SPRING_AI_OLLAMA_EMBEDDING_OPTIONS_MODEL:qwen3-embedding:0.6b}
   datasource:
     type: com.zaxxer.hikari.HikariDataSource
     url: jdbc:mysql://127.0.0.1:3306/lease?useUnicode=true&characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=GMT%2b8
@@ -41,6 +63,11 @@ mq:
   enabled: ${MQ_ENABLED:true}
 
 lease:
+  assistant:
+    enabled: ${LEASE_ASSISTANT_ENABLED:true}
+    conversation-ttl: ${LEASE_ASSISTANT_CONVERSATION_TTL:7d}
+    max-history-messages: ${LEASE_ASSISTANT_MAX_HISTORY_MESSAGES:12}
+    stream-timeout: ${LEASE_ASSISTANT_STREAM_TIMEOUT:2m}
   cache:
     hot-data-enabled: ${LEASE_CACHE_HOT_DATA_ENABLED:true}
     local-enabled: ${LEASE_CACHE_LOCAL_ENABLED:true}

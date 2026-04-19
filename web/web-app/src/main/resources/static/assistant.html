@@ -20,15 +20,16 @@
         }
 
         * { box-sizing: border-box; }
+
         body {
             margin: 0;
             min-height: 100vh;
             font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
             color: var(--text);
             background:
-                    radial-gradient(circle at top left, rgba(23, 98, 75, 0.18), transparent 28%),
-                    radial-gradient(circle at right, rgba(189, 144, 87, 0.22), transparent 25%),
-                    linear-gradient(135deg, #f5f1e8 0%, #f3eadf 42%, #efe3d6 100%);
+                radial-gradient(circle at top left, rgba(23, 98, 75, 0.18), transparent 28%),
+                radial-gradient(circle at right, rgba(189, 144, 87, 0.22), transparent 25%),
+                linear-gradient(135deg, #f5f1e8 0%, #f3eadf 42%, #efe3d6 100%);
             padding: 32px 18px;
         }
 
@@ -368,26 +369,26 @@
         <span class="eyebrow">LEASE ASSISTANT</span>
         <h1>租房智能助手</h1>
         <p class="intro">
-            这是一个本地调试聊天页，默认走流式输出，也可以切回普通 JSON 接口做对比。
-            页面会保留换行和段落，也会自动带上会话 ID，方便测试多轮上下文、Mongo 记忆和本地知识库问答。
+            这是 Spring AI 版助手的本地调试页，默认使用 SSE 流式输出，也可以切回普通 JSON 接口做对比。
+            当前助手采用“接口层 + 编排层 + 工具层 + 会话层”的拆分方式，页面会自动携带会话 ID，便于验证多轮上下文、工具调用和业务动作回执。
         </p>
 
-        <h2>当前支持</h2>
+        <h2>当前能力</h2>
         <ul class="bullet-list">
-            <li>查询房源列表</li>
-            <li>查看房间详情</li>
-            <li>查看我的预约</li>
-            <li>查看我的租约</li>
-            <li>多轮上下文记忆</li>
-            <li>租房术语与流程问答</li>
-            <li>简单闲聊与常识问答</li>
+            <li>查询公寓详情、房间详情和房源列表</li>
+            <li>查看我的浏览记录、预约记录和租约订单</li>
+            <li>发起预约、取消预约、调整预约时间</li>
+            <li>创建租约订单、查看订单详情、取消订单</li>
+            <li>基于 Redis 保存会话上下文</li>
+            <li>支持工具调用事件和流式回复展示</li>
+            <li>当前版本未接入 RAG 知识库，重点验证业务工具链路</li>
         </ul>
 
         <div class="info-box">
             <label for="tokenInput">Access Token</label>
-            <input id="tokenInput" type="text" placeholder="粘贴 access-token，可保存到浏览器本地">
+            <input id="tokenInput" type="text" placeholder="粘贴 access-token，可自动保存到浏览器本地">
             <div class="tip">
-                如果要查“我的预约 / 我的租约”，需要先登录并填写 token。页面会自动保存在浏览器本地。
+                如果要查询“我的预约”“我的订单”等个人数据，需要先登录并填写 token。页面会自动保存到浏览器本地。
             </div>
         </div>
 
@@ -395,7 +396,7 @@
             <label for="conversationInput">Conversation ID</label>
             <input id="conversationInput" type="text" placeholder="留空则自动生成">
             <div class="tip">
-                同一个会话 ID 会持续复用上下文。点击“新会话”会重新生成并清空当前聊天内容。
+                同一个会话 ID 会复用上下文历史。点击“新会话”会重新生成新的会话 ID，并清空当前聊天记录。
             </div>
             <div id="conversationPreview" class="conversation-id"></div>
         </div>
@@ -409,7 +410,7 @@
                 </label>
             </div>
             <div class="tip">
-                开启后会调用 <code>/app/assistant/chat/stream</code>，边生成边展示；关闭后走普通 JSON 接口。
+                开启后调用 <code>/app/assistant/chat/stream</code>，可观察增量回复、工具调用和工具返回；关闭后走普通 <code>/app/assistant/chat</code> 接口。
             </div>
         </div>
     </aside>
@@ -417,17 +418,19 @@
     <section class="panel chat">
         <div class="chat-header">
             <h2 class="chat-title">对话测试</h2>
-            <p class="chat-subtitle">可以先试示例问题，再继续追问“第二个房源呢”“这个房间介绍一下”这种多轮问题。</p>
+            <p class="chat-subtitle">
+                可以先试示例问题，再继续追问“第二个房源呢”“帮我取消刚才那个预约”这类多轮业务问题。
+            </p>
             <div class="suggestions">
                 <button class="suggestion-chip" type="button" data-text="你可以帮我做什么？">能力说明</button>
-                <button class="suggestion-chip" type="button" data-text="帮我查一下北京市 3000 以内的房源">北京市房源</button>
-                <button class="suggestion-chip" type="button" data-text="押一付三是什么意思？">术语解释</button>
-                <button class="suggestion-chip" type="button" data-text="预约看房的流程是什么？">流程问答</button>
+                <button class="suggestion-chip" type="button" data-text="帮我查一下北京市 3000 以内的房源">查询房源</button>
+                <button class="suggestion-chip" type="button" data-text="帮我看看我的预约记录">我的预约</button>
+                <button class="suggestion-chip" type="button" data-text="帮我创建一个租约订单，需要我提供哪些信息？">创建订单</button>
             </div>
         </div>
 
         <div id="messages" class="messages">
-            <div class="message system">你好，我已经准备好了。你可以先问我“你可以帮我做什么？”。</div>
+            <div class="message system">你好，我已经准备好了。你可以先问我“你可以帮我做什么？”</div>
         </div>
 
         <div class="composer">
@@ -540,7 +543,7 @@
         if (taskState && taskState.taskType) {
             const badge = document.createElement('div');
             badge.className = 'task-badge';
-            badge.textContent = `任务: ${taskState.taskType} / ${taskState.taskStatus || 'UNKNOWN'}`;
+            badge.textContent = `任务：${taskState.taskType} / ${taskState.taskStatus || 'UNKNOWN'}`;
             meta.appendChild(badge);
         }
 
@@ -718,7 +721,7 @@
                 break;
             case 'tool_result':
                 statusText.textContent = payload.toolName
-                    ? `工具 ${payload.toolName} 已返回`
+                    ? `工具 ${payload.toolName} 已返回结果`
                     : '工具调用完成';
                 break;
             case 'complete':
