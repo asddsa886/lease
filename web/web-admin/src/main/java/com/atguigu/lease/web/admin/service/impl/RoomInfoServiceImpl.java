@@ -1,5 +1,6 @@
 package com.atguigu.lease.web.admin.service.impl;
 
+import com.atguigu.lease.common.cache.HotDataCacheHelper;
 import com.atguigu.lease.common.constant.RedisConstant.RedisConstant;
 import com.atguigu.lease.common.utils.TransactionUtils;
 import com.atguigu.lease.model.entity.*;
@@ -18,7 +19,6 @@ import com.baomidou.mybatisplus.core.toolkit.CollectionUtils;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -77,8 +77,7 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
     private RoomPaymentTypeService roomPaymentTypeService;
 
     @Autowired
-    private StringRedisTemplate stringRedisTemplate;
-
+    private HotDataCacheHelper hotDataCacheHelper;
 
     @Override
     public IPage<RoomItemVo> pageRoomItemByQuery(IPage<RoomItemVo> page, RoomQueryVo queryVo) {
@@ -288,10 +287,10 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
 
     private void evictAppRoomRelatedCache(Long roomId, Long apartmentId) {
         if (roomId != null) {
-            stringRedisTemplate.delete(RedisConstant.APP_ROOM_DETAIL_KEY_PREFIX + roomId);
+            hotDataCacheHelper.evict(RedisConstant.APP_ROOM_DETAIL_KEY_PREFIX + roomId);
         }
         if (apartmentId != null) {
-            stringRedisTemplate.delete(RedisConstant.APP_APARTMENT_DETAIL_KEY_PREFIX + apartmentId);
+            hotDataCacheHelper.evict(RedisConstant.APP_APARTMENT_DETAIL_KEY_PREFIX + apartmentId);
         }
     }
 }

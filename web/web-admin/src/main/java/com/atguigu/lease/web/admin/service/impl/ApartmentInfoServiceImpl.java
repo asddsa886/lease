@@ -1,5 +1,6 @@
 package com.atguigu.lease.web.admin.service.impl;
 
+import com.atguigu.lease.common.cache.HotDataCacheHelper;
 import com.atguigu.lease.common.exception.LeaseException;
 import com.atguigu.lease.common.result.ResultCodeEnum;
 import com.atguigu.lease.common.constant.RedisConstant.RedisConstant;
@@ -20,7 +21,6 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -67,9 +67,7 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
     private ApartmentFeeValueService apartmentFeeValueService;
 
     @Autowired
-    private StringRedisTemplate stringRedisTemplate;
-
-
+    private HotDataCacheHelper hotDataCacheHelper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -239,7 +237,7 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
         }
 
         // 1) apartment detail
-        stringRedisTemplate.delete(RedisConstant.APP_APARTMENT_DETAIL_KEY_PREFIX + apartmentId);
+        hotDataCacheHelper.evict(RedisConstant.APP_APARTMENT_DETAIL_KEY_PREFIX + apartmentId);
 
         // 2) room detail under this apartment
         LambdaQueryWrapper<RoomInfo> roomQuery = new LambdaQueryWrapper<>();
@@ -252,7 +250,7 @@ public class ApartmentInfoServiceImpl extends ServiceImpl<ApartmentInfoMapper, A
         }
         for (RoomInfo room : rooms) {
             if (room != null && room.getId() != null) {
-                stringRedisTemplate.delete(RedisConstant.APP_ROOM_DETAIL_KEY_PREFIX + room.getId());
+                hotDataCacheHelper.evict(RedisConstant.APP_ROOM_DETAIL_KEY_PREFIX + room.getId());
             }
         }
     }

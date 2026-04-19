@@ -45,6 +45,10 @@ mq:
 lease:
   cache:
     hot-data-enabled: ${LEASE_CACHE_HOT_DATA_ENABLED:true}
+    local-enabled: ${LEASE_CACHE_LOCAL_ENABLED:true}
+    local-max-size: ${LEASE_CACHE_LOCAL_MAX_SIZE:1024}
+    local-ttl-sec: ${LEASE_CACHE_LOCAL_TTL_SEC:30}
+    local-null-ttl-sec: ${LEASE_CACHE_LOCAL_NULL_TTL_SEC:10}
   mq:
     order-timeout-ttl-ms: ${LEASE_MQ_ORDER_TIMEOUT_TTL_MS:900000}
   async:
