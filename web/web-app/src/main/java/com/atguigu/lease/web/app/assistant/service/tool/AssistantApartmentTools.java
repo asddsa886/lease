@@ -15,8 +15,8 @@ public class AssistantApartmentTools extends AbstractAssistantTools {
         this.apartmentInfoService = apartmentInfoService;
     }
 
-    @Tool(description = "Get apartment detail by apartment id.")
-    public AssistantToolResult getApartmentDetail(@ToolParam(description = "Apartment id", required = true) Long apartmentId,
+    @Tool(description = "查询公寓详情")
+    public AssistantToolResult getApartmentDetail(@ToolParam(description = "公寓ID", required = true) Long apartmentId,
                                                   ToolContext toolContext) {
         return executeTool("getApartmentDetail", toolContext, "公寓详情查询成功",
                 () -> apartmentInfoService.getDetailById(apartmentId));

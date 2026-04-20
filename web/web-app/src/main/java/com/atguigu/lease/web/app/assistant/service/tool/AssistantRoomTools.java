@@ -46,23 +46,23 @@ public class AssistantRoomTools extends AbstractAssistantTools {
         this.paymentTypeService = paymentTypeService;
     }
 
-    @Tool(description = "Get room detail by room id.")
-    public AssistantToolResult getRoomDetail(@ToolParam(description = "Room id", required = true) Long roomId,
+    @Tool(description = "根据房间ID查询房间详情")
+    public AssistantToolResult getRoomDetail(@ToolParam(description = "房间ID", required = true) Long roomId,
                                              ToolContext toolContext) {
         return executeTool("getRoomDetail", toolContext, "房间详情查询成功",
                 () -> roomInfoService.getDetailById(roomId));
     }
 
-    @Tool(description = "Search room list with natural language preferences. Province, city, district and payment type can be passed by Chinese names directly. Payment type is optional. If sort order is omitted, use asc by default. For broad browsing, location plus rent budget is enough.")
-    public AssistantToolResult searchRooms(@ToolParam(description = "Page number, default 1") Integer pageNumber,
-                                           @ToolParam(description = "Page size, default 10") Integer pageSize,
-                                           @ToolParam(description = "Province name, optional, such as 北京市 or 河北省") String provinceName,
-                                           @ToolParam(description = "City name, optional, such as 北京市 or 广州市") String cityName,
-                                           @ToolParam(description = "District name, optional, such as 昌平区 or 天河区") String districtName,
-                                           @ToolParam(description = "Minimum rent, optional") BigDecimal minRent,
-                                           @ToolParam(description = "Maximum rent, optional") BigDecimal maxRent,
-                                           @ToolParam(description = "Payment type name, optional, such as 月付、季付、半年付、年付") String paymentTypeName,
-                                           @ToolParam(description = "Sort order, optional: asc or desc. Default asc") String orderType,
+    @Tool(description = "按自然语言偏好搜索房源。省、市、区和支付方式都可以直接传中文名称，支付方式可选；如果未传排序，则默认按租金升序；如果只是粗筛，位置加预算就足够。")
+    public AssistantToolResult searchRooms(@ToolParam(description = "页码，默认 1") Integer pageNumber,
+                                           @ToolParam(description = "每页条数，默认 10") Integer pageSize,
+                                           @ToolParam(description = "省份名称，可选，例如 北京市 或 河北省") String provinceName,
+                                           @ToolParam(description = "城市名称，可选，例如 北京市 或 广州市") String cityName,
+                                           @ToolParam(description = "区县名称，可选，例如 昌平区 或 天河区") String districtName,
+                                           @ToolParam(description = "最低租金，可选") BigDecimal minRent,
+                                           @ToolParam(description = "最高租金，可选") BigDecimal maxRent,
+                                           @ToolParam(description = "支付方式名称，可选，例如 月付、季付、半年付、年付") String paymentTypeName,
+                                           @ToolParam(description = "排序方式，可选：asc 或 desc，默认 asc") String orderType,
                                            ToolContext toolContext) {
         return executeTool("searchRooms", toolContext, "房源列表查询成功", () -> {
             ResolvedRegion region = resolveRegion(provinceName, cityName, districtName);
@@ -84,10 +84,10 @@ public class AssistantRoomTools extends AbstractAssistantTools {
         });
     }
 
-    @Tool(description = "List rooms under a specific apartment.")
-    public AssistantToolResult listRoomsByApartment(@ToolParam(description = "Apartment id", required = true) Long apartmentId,
-                                                    @ToolParam(description = "Page number, default 1") Integer pageNumber,
-                                                    @ToolParam(description = "Page size, default 10") Integer pageSize,
+    @Tool(description = "查询某个公寓下的房间列表")
+    public AssistantToolResult listRoomsByApartment(@ToolParam(description = "公寓ID", required = true) Long apartmentId,
+                                                    @ToolParam(description = "页码，默认 1") Integer pageNumber,
+                                                    @ToolParam(description = "每页条数，默认 10") Integer pageSize,
                                                     ToolContext toolContext) {
         return executeTool("listRoomsByApartment", toolContext, "公寓下房间列表查询成功", () -> {
             IPage<RoomItemVo> result = roomInfoService.pageItemByApartmentId(
@@ -103,7 +103,7 @@ public class AssistantRoomTools extends AbstractAssistantTools {
         Long resolvedCityId = resolveCityId(cityName, resolvedProvinceId);
         Long resolvedDistrictId = resolveDistrictId(districtName, resolvedCityId);
 
-        // Municipalities like "北京市" are often stored as province names while city_info uses "市辖区".
+        // 直辖市场景下，用户经常把“北京市”直接当城市传入，而 city_info 里可能存的是“市辖区”。
         if (resolvedCityId == null && hasText(cityName) && resolvedProvinceId == null) {
             resolvedProvinceId = resolveProvinceId(cityName);
         }
@@ -148,7 +148,7 @@ public class AssistantRoomTools extends AbstractAssistantTools {
         if (cityId != null) {
             queryWrapper.eq(DistrictInfo::getCityId, cityId.intValue());
         }
-        queryWrapper.in(DistrictInfo::getName, buildRegionCandidates(districtName, "区", "县", "旗"))
+        queryWrapper.in(DistrictInfo::getName, buildRegionCandidates(districtName, "区", "县", "市"))
                 .last("limit 1");
         return districtInfoService.list(queryWrapper).stream()
                 .findFirst()
@@ -192,7 +192,7 @@ public class AssistantRoomTools extends AbstractAssistantTools {
 
     private String stripRegionSuffix(String text) {
         String result = text;
-        String[] suffixes = {"特别行政区", "自治区", "自治州", "地区", "省", "市", "区", "县", "旗", "盟"};
+        String[] suffixes = {"特别行政区", "自治区", "自治州", "地区", "省", "市", "区", "县", "盟"};
         for (String suffix : suffixes) {
             if (result.endsWith(suffix) && result.length() > suffix.length()) {
                 result = result.substring(0, result.length() - suffix.length());
@@ -224,8 +224,8 @@ public class AssistantRoomTools extends AbstractAssistantTools {
         return compactText(text)
                 .replace("，", "")
                 .replace(",", "")
-                .replace("（", "")
-                .replace("）", "")
+                .replace("。", "")
+                .replace("、", "")
                 .replace("(", "")
                 .replace(")", "")
                 .toLowerCase(Locale.ROOT);

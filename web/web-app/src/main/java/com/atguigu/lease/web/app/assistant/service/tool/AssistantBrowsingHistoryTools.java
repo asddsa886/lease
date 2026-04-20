@@ -18,9 +18,9 @@ public class AssistantBrowsingHistoryTools extends AbstractAssistantTools {
         this.browsingHistoryService = browsingHistoryService;
     }
 
-    @Tool(description = "List browsing history of current user.")
-    public AssistantToolResult listMyBrowsingHistory(@ToolParam(description = "Page number, default 1") Integer pageNumber,
-                                                     @ToolParam(description = "Page size, default 10") Integer pageSize,
+    @Tool(description = "分页查询当前用户的浏览记录")
+    public AssistantToolResult listMyBrowsingHistory(@ToolParam(description = "页码，默认 1") Integer pageNumber,
+                                                     @ToolParam(description = "每页条数，默认 10") Integer pageSize,
                                                      ToolContext toolContext) {
         return executeTool("listMyBrowsingHistory", toolContext, "浏览记录查询成功", () -> {
             IPage<HistoryItemVo> page = browsingHistoryService.pageItem(

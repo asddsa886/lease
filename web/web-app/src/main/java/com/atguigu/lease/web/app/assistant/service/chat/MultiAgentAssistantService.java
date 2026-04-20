@@ -5,6 +5,18 @@ import com.atguigu.lease.web.app.assistant.config.AssistantProperties;
 import com.atguigu.lease.web.app.assistant.dto.AssistantChatRequest;
 import com.atguigu.lease.web.app.assistant.dto.AssistantChatResponse;
 import com.atguigu.lease.web.app.assistant.dto.AssistantStreamPayload;
+import com.atguigu.lease.web.app.assistant.dto.AssistantTaskState;
+import com.atguigu.lease.web.app.assistant.service.agent.AbstractAssistantAgent;
+import com.atguigu.lease.web.app.assistant.service.agent.AppointmentAssistantAgent;
+import com.atguigu.lease.web.app.assistant.service.agent.AssistantAgentRoute;
+import com.atguigu.lease.web.app.assistant.service.agent.AssistantRoutingPolicy;
+import com.atguigu.lease.web.app.assistant.service.agent.AssistantSupervisorAgent;
+import com.atguigu.lease.web.app.assistant.service.agent.AssistantSupervisorDecision;
+import com.atguigu.lease.web.app.assistant.service.agent.GeneralAssistantAgent;
+import com.atguigu.lease.web.app.assistant.service.agent.LeaseOrderAssistantAgent;
+import com.atguigu.lease.web.app.assistant.service.agent.RentalWorkflowAssistantAgent;
+import com.atguigu.lease.web.app.assistant.service.agent.RoomSearchAssistantAgent;
+import com.atguigu.lease.web.app.assistant.service.session.AssistantConversationMessage;
 import com.atguigu.lease.web.app.assistant.service.session.AssistantConversationSessionService;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantApartmentTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantAppointmentTools;
@@ -13,15 +25,15 @@ import com.atguigu.lease.web.app.assistant.service.tool.AssistantLeaseOrderTools
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantRoomTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantToolContextSupport;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantToolEventEmitter;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 
 import java.io.IOException;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,62 +41,71 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
-public class SpringAiAssistantService implements AppAssistantService {
+public class MultiAgentAssistantService implements AppAssistantService {
 
-    private final ChatClient chatClient;
     private final AssistantPromptService promptService;
     private final AssistantConversationSessionService conversationSessionService;
     private final AssistantProperties assistantProperties;
-    private final AssistantApartmentTools apartmentTools;
-    private final AssistantRoomTools roomTools;
-    private final AssistantBrowsingHistoryTools browsingHistoryTools;
-    private final AssistantAppointmentTools appointmentTools;
-    private final AssistantLeaseOrderTools leaseOrderTools;
+    private final AssistantSupervisorAgent supervisorAgent;
+    private final Map<AssistantAgentRoute, AbstractAssistantAgent> agents;
 
-    public SpringAiAssistantService(ChatModel chatModel,
-                                    AssistantPromptService promptService,
-                                    AssistantConversationSessionService conversationSessionService,
-                                    AssistantProperties assistantProperties,
-                                    AssistantApartmentTools apartmentTools,
-                                    AssistantRoomTools roomTools,
-                                    AssistantBrowsingHistoryTools browsingHistoryTools,
-                                    AssistantAppointmentTools appointmentTools,
-                                    AssistantLeaseOrderTools leaseOrderTools) {
-        this.chatClient = ChatClient.builder(chatModel).build();
+    public MultiAgentAssistantService(ChatModel chatModel,
+                                      ObjectMapper objectMapper,
+                                      AssistantPromptService promptService,
+                                      AssistantConversationSessionService conversationSessionService,
+                                      AssistantProperties assistantProperties,
+                                      AssistantApartmentTools apartmentTools,
+                                      AssistantRoomTools roomTools,
+                                      AssistantBrowsingHistoryTools browsingHistoryTools,
+                                      AssistantAppointmentTools appointmentTools,
+                                      AssistantLeaseOrderTools leaseOrderTools) {
         this.promptService = promptService;
         this.conversationSessionService = conversationSessionService;
         this.assistantProperties = assistantProperties;
-        this.apartmentTools = apartmentTools;
-        this.roomTools = roomTools;
-        this.browsingHistoryTools = browsingHistoryTools;
-        this.appointmentTools = appointmentTools;
-        this.leaseOrderTools = leaseOrderTools;
+        this.supervisorAgent = new AssistantSupervisorAgent(chatModel, objectMapper, new AssistantRoutingPolicy());
+        this.agents = new EnumMap<>(AssistantAgentRoute.class);
+        this.agents.put(AssistantAgentRoute.GENERAL, new GeneralAssistantAgent(chatModel, browsingHistoryTools));
+        this.agents.put(AssistantAgentRoute.ROOM_SEARCH, new RoomSearchAssistantAgent(chatModel, apartmentTools, roomTools));
+        this.agents.put(AssistantAgentRoute.APPOINTMENT, new AppointmentAssistantAgent(chatModel, appointmentTools, apartmentTools, roomTools));
+        this.agents.put(AssistantAgentRoute.LEASE_ORDER, new LeaseOrderAssistantAgent(chatModel, leaseOrderTools, roomTools, apartmentTools));
+        this.agents.put(AssistantAgentRoute.RENTAL_WORKFLOW, new RentalWorkflowAssistantAgent(chatModel, apartmentTools, roomTools, appointmentTools, leaseOrderTools));
     }
 
     @Override
     public AssistantChatResponse chat(AssistantChatRequest request, LoginUser currentUser) {
         String userMessage = request.getMessage().trim();
         String conversationId = conversationSessionService.resolveConversationId(currentUser.getId(), request.getConversationId());
-        List<Message> messages = promptService.buildPromptMessages(
-                currentUser,
-                conversationSessionService.getMessages(currentUser.getId(), conversationId),
-                userMessage
-        );
+        List<AssistantConversationMessage> history = conversationSessionService.getMessages(currentUser.getId(), conversationId);
+        AssistantSupervisorDecision decision = supervisorAgent.decide(currentUser, history, userMessage);
+        AbstractAssistantAgent agent = resolveAgent(decision);
 
         try {
-            String reply = chatClient.prompt()
-                    .messages(messages)
-                    .tools(apartmentTools, roomTools, browsingHistoryTools, appointmentTools, leaseOrderTools)
-                    .toolContext(buildToolContext(currentUser, conversationId, AssistantToolEventEmitter.noop()))
-                    .call()
-                    .content();
+            String reply = agent.chat(
+                    currentUser,
+                    history,
+                    userMessage,
+                    decision,
+                    promptService,
+                    buildToolContext(currentUser, conversationId, AssistantToolEventEmitter.noop())
+            );
 
-            AssistantChatResponse response = promptService.buildResponse(conversationId, reply);
+            AssistantChatResponse response = promptService.buildResponse(
+                    conversationId,
+                    reply,
+                    new AssistantTaskState(decision.route().taskType(), "completed"),
+                    agent.nextActions()
+            );
             conversationSessionService.appendConversation(currentUser.getId(), conversationId, userMessage, response.getReply());
             return response;
         } catch (Exception e) {
-            log.error("Assistant chat call failed, conversationId={}, userId={}", conversationId, currentUser.getId(), e);
-            return promptService.buildResponse(conversationId, "AI 服务调用失败，请稍后再试，或检查模型配置是否正确。");
+            log.error("Multi-agent assistant chat failed, conversationId={}, userId={}, route={}",
+                    conversationId, currentUser.getId(), decision.route(), e);
+            return promptService.buildResponse(
+                    conversationId,
+                    "AI 助手处理失败，请稍后再试。",
+                    new AssistantTaskState(decision.route().taskType(), "failed"),
+                    agent.nextActions()
+            );
         }
     }
 
@@ -92,11 +113,9 @@ public class SpringAiAssistantService implements AppAssistantService {
     public SseEmitter streamChat(AssistantChatRequest request, LoginUser currentUser) {
         String conversationId = conversationSessionService.resolveConversationId(currentUser.getId(), request.getConversationId());
         String userMessage = request.getMessage().trim();
-        List<Message> messages = promptService.buildPromptMessages(
-                currentUser,
-                conversationSessionService.getMessages(currentUser.getId(), conversationId),
-                userMessage
-        );
+        List<AssistantConversationMessage> history = conversationSessionService.getMessages(currentUser.getId(), conversationId);
+        AssistantSupervisorDecision decision = supervisorAgent.decide(currentUser, history, userMessage);
+        AbstractAssistantAgent agent = resolveAgent(decision);
 
         SseEmitter emitter = new SseEmitter(assistantProperties.getStreamTimeout().toMillis());
         StringBuilder assistantReply = new StringBuilder();
@@ -112,19 +131,22 @@ public class SpringAiAssistantService implements AppAssistantService {
 
         sendEvent(emitter, "start", AssistantStreamPayload.builder()
                 .conversationId(conversationId)
-                .message("开始生成回复")
+                .message("已分配给" + decision.route().displayName() + "，开始处理")
                 .build(), emitterClosed);
 
         Flux<String> contentFlux;
         try {
-            contentFlux = chatClient.prompt()
-                    .messages(messages)
-                    .tools(apartmentTools, roomTools, browsingHistoryTools, appointmentTools, leaseOrderTools)
-                    .toolContext(buildToolContext(currentUser, conversationId, toolEventEmitter))
-                    .stream()
-                    .content();
+            contentFlux = agent.stream(
+                    currentUser,
+                    history,
+                    userMessage,
+                    decision,
+                    promptService,
+                    buildToolContext(currentUser, conversationId, toolEventEmitter)
+            );
         } catch (Exception e) {
-            log.error("Assistant stream init failed, conversationId={}, userId={}", conversationId, currentUser.getId(), e);
+            log.error("Multi-agent stream init failed, conversationId={}, userId={}, route={}",
+                    conversationId, currentUser.getId(), decision.route(), e);
             sendEvent(emitter, "error", AssistantStreamPayload.builder()
                     .conversationId(conversationId)
                     .message("AI 流式会话初始化失败，请检查模型配置。")
@@ -145,7 +167,8 @@ public class SpringAiAssistantService implements AppAssistantService {
                     }
                 },
                 error -> {
-                    log.error("Assistant streaming failed, conversationId={}, userId={}", conversationId, currentUser.getId(), error);
+                    log.error("Multi-agent streaming failed, conversationId={}, userId={}, route={}",
+                            conversationId, currentUser.getId(), decision.route(), error);
                     sendEvent(emitter, "error", AssistantStreamPayload.builder()
                             .conversationId(conversationId)
                             .message("AI 流式会话执行失败，请稍后再试。")
@@ -153,7 +176,12 @@ public class SpringAiAssistantService implements AppAssistantService {
                     safeComplete(emitter, emitterClosed);
                 },
                 () -> {
-                    AssistantChatResponse response = promptService.buildResponse(conversationId, assistantReply.toString());
+                    AssistantChatResponse response = promptService.buildResponse(
+                            conversationId,
+                            assistantReply.toString(),
+                            new AssistantTaskState(decision.route().taskType(), "completed"),
+                            agent.nextActions()
+                    );
                     conversationSessionService.appendConversation(currentUser.getId(), conversationId, userMessage, response.getReply());
                     sendEvent(emitter, "complete", AssistantStreamPayload.builder()
                             .conversationId(response.getConversationId())
@@ -168,12 +196,14 @@ public class SpringAiAssistantService implements AppAssistantService {
         subscriptionRef.set(subscription);
 
         emitter.onTimeout(() -> {
-            log.warn("Assistant streaming timed out, conversationId={}, userId={}", conversationId, currentUser.getId());
+            log.warn("Multi-agent streaming timed out, conversationId={}, userId={}, route={}",
+                    conversationId, currentUser.getId(), decision.route());
             disposeSubscription(subscriptionRef);
             safeComplete(emitter, emitterClosed);
         });
         emitter.onError(error -> {
-            log.warn("Assistant streaming emitter error, conversationId={}, userId={}", conversationId, currentUser.getId(), error);
+            log.warn("Multi-agent emitter error, conversationId={}, userId={}, route={}",
+                    conversationId, currentUser.getId(), decision.route(), error);
             disposeSubscription(subscriptionRef);
             emitterClosed.set(true);
         });
@@ -182,6 +212,10 @@ public class SpringAiAssistantService implements AppAssistantService {
             emitterClosed.set(true);
         });
         return emitter;
+    }
+
+    private AbstractAssistantAgent resolveAgent(AssistantSupervisorDecision decision) {
+        return agents.getOrDefault(decision.route(), agents.get(AssistantAgentRoute.GENERAL));
     }
 
     private Map<String, Object> buildToolContext(LoginUser currentUser,

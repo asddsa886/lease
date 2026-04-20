@@ -3,13 +3,14 @@ package com.atguigu.lease.web.app.assistant.config;
 import com.atguigu.lease.web.app.assistant.service.chat.AppAssistantService;
 import com.atguigu.lease.web.app.assistant.service.chat.AssistantPromptService;
 import com.atguigu.lease.web.app.assistant.service.chat.DisabledAssistantService;
-import com.atguigu.lease.web.app.assistant.service.chat.SpringAiAssistantService;
+import com.atguigu.lease.web.app.assistant.service.chat.MultiAgentAssistantService;
 import com.atguigu.lease.web.app.assistant.service.session.AssistantConversationSessionService;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantApartmentTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantAppointmentTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantBrowsingHistoryTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantLeaseOrderTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantRoomTools;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -24,6 +25,7 @@ public class AssistantConfiguration {
     @Bean
     @ConditionalOnMissingBean(AppAssistantService.class)
     public AppAssistantService appAssistantService(ObjectProvider<ChatModel> chatModelProvider,
+                                                   ObjectMapper objectMapper,
                                                    AssistantPromptService promptService,
                                                    AssistantConversationSessionService conversationSessionService,
                                                    AssistantProperties assistantProperties,
@@ -34,8 +36,9 @@ public class AssistantConfiguration {
                                                    AssistantLeaseOrderTools leaseOrderTools) {
         ChatModel chatModel = chatModelProvider.getIfAvailable();
         if (assistantProperties.isEnabled() && chatModel != null) {
-            return new SpringAiAssistantService(
+            return new MultiAgentAssistantService(
                     chatModel,
+                    objectMapper,
                     promptService,
                     conversationSessionService,
                     assistantProperties,
