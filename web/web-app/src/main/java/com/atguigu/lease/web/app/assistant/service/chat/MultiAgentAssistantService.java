@@ -21,6 +21,7 @@ import com.atguigu.lease.web.app.assistant.service.session.AssistantConversation
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantApartmentTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantAppointmentTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantBrowsingHistoryTools;
+import com.atguigu.lease.web.app.assistant.service.tool.AssistantKnowledgeTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantLeaseOrderTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantRoomTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantToolContextSupport;
@@ -58,17 +59,18 @@ public class MultiAgentAssistantService implements AppAssistantService {
                                       AssistantRoomTools roomTools,
                                       AssistantBrowsingHistoryTools browsingHistoryTools,
                                       AssistantAppointmentTools appointmentTools,
-                                      AssistantLeaseOrderTools leaseOrderTools) {
+                                      AssistantLeaseOrderTools leaseOrderTools,
+                                      AssistantKnowledgeTools knowledgeTools) {
         this.promptService = promptService;
         this.conversationSessionService = conversationSessionService;
         this.assistantProperties = assistantProperties;
         this.supervisorAgent = new AssistantSupervisorAgent(chatModel, objectMapper, new AssistantRoutingPolicy());
         this.agents = new EnumMap<>(AssistantAgentRoute.class);
-        this.agents.put(AssistantAgentRoute.GENERAL, new GeneralAssistantAgent(chatModel, browsingHistoryTools));
-        this.agents.put(AssistantAgentRoute.ROOM_SEARCH, new RoomSearchAssistantAgent(chatModel, apartmentTools, roomTools));
-        this.agents.put(AssistantAgentRoute.APPOINTMENT, new AppointmentAssistantAgent(chatModel, appointmentTools, apartmentTools, roomTools));
-        this.agents.put(AssistantAgentRoute.LEASE_ORDER, new LeaseOrderAssistantAgent(chatModel, leaseOrderTools, roomTools, apartmentTools));
-        this.agents.put(AssistantAgentRoute.RENTAL_WORKFLOW, new RentalWorkflowAssistantAgent(chatModel, apartmentTools, roomTools, appointmentTools, leaseOrderTools));
+        this.agents.put(AssistantAgentRoute.GENERAL, new GeneralAssistantAgent(chatModel, browsingHistoryTools, knowledgeTools));
+        this.agents.put(AssistantAgentRoute.ROOM_SEARCH, new RoomSearchAssistantAgent(chatModel, apartmentTools, roomTools, knowledgeTools));
+        this.agents.put(AssistantAgentRoute.APPOINTMENT, new AppointmentAssistantAgent(chatModel, appointmentTools, apartmentTools, roomTools, knowledgeTools));
+        this.agents.put(AssistantAgentRoute.LEASE_ORDER, new LeaseOrderAssistantAgent(chatModel, leaseOrderTools, roomTools, apartmentTools, knowledgeTools));
+        this.agents.put(AssistantAgentRoute.RENTAL_WORKFLOW, new RentalWorkflowAssistantAgent(chatModel, apartmentTools, roomTools, appointmentTools, leaseOrderTools, knowledgeTools));
     }
 
     @Override

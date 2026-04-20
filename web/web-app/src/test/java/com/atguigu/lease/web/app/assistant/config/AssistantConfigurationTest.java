@@ -8,6 +8,7 @@ import com.atguigu.lease.web.app.assistant.service.session.AssistantConversation
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantApartmentTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantAppointmentTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantBrowsingHistoryTools;
+import com.atguigu.lease.web.app.assistant.service.tool.AssistantKnowledgeTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantLeaseOrderTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantRoomTools;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -29,6 +30,7 @@ class AssistantConfigurationTest {
             .withBean(AssistantRoomTools.class, () -> mock(AssistantRoomTools.class))
             .withBean(AssistantBrowsingHistoryTools.class, () -> mock(AssistantBrowsingHistoryTools.class))
             .withBean(AssistantAppointmentTools.class, () -> mock(AssistantAppointmentTools.class))
+            .withBean(AssistantKnowledgeTools.class, () -> mock(AssistantKnowledgeTools.class))
             .withBean(AssistantLeaseOrderTools.class, () -> mock(AssistantLeaseOrderTools.class));
 
     @Test

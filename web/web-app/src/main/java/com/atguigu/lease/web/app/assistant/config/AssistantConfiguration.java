@@ -8,6 +8,7 @@ import com.atguigu.lease.web.app.assistant.service.session.AssistantConversation
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantApartmentTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantAppointmentTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantBrowsingHistoryTools;
+import com.atguigu.lease.web.app.assistant.service.tool.AssistantKnowledgeTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantLeaseOrderTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantRoomTools;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -33,7 +34,8 @@ public class AssistantConfiguration {
                                                    AssistantRoomTools roomTools,
                                                    AssistantBrowsingHistoryTools browsingHistoryTools,
                                                    AssistantAppointmentTools appointmentTools,
-                                                   AssistantLeaseOrderTools leaseOrderTools) {
+                                                   AssistantLeaseOrderTools leaseOrderTools,
+                                                   AssistantKnowledgeTools knowledgeTools) {
         ChatModel chatModel = chatModelProvider.getIfAvailable();
         if (assistantProperties.isEnabled() && chatModel != null) {
             return new MultiAgentAssistantService(
@@ -46,7 +48,8 @@ public class AssistantConfiguration {
                     roomTools,
                     browsingHistoryTools,
                     appointmentTools,
-                    leaseOrderTools
+                    leaseOrderTools,
+                    knowledgeTools
             );
         }
         return new DisabledAssistantService(promptService);

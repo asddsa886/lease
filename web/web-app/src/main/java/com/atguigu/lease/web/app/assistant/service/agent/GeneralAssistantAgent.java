@@ -2,6 +2,7 @@ package com.atguigu.lease.web.app.assistant.service.agent;
 
 import com.atguigu.lease.web.app.assistant.dto.AssistantNextAction;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantBrowsingHistoryTools;
+import com.atguigu.lease.web.app.assistant.service.tool.AssistantKnowledgeTools;
 import org.springframework.ai.chat.model.ChatModel;
 
 import java.util.List;
@@ -9,10 +10,14 @@ import java.util.List;
 public class GeneralAssistantAgent extends AbstractAssistantAgent {
 
     private final AssistantBrowsingHistoryTools browsingHistoryTools;
+    private final AssistantKnowledgeTools knowledgeTools;
 
-    public GeneralAssistantAgent(ChatModel chatModel, AssistantBrowsingHistoryTools browsingHistoryTools) {
+    public GeneralAssistantAgent(ChatModel chatModel,
+                                 AssistantBrowsingHistoryTools browsingHistoryTools,
+                                 AssistantKnowledgeTools knowledgeTools) {
         super(chatModel);
         this.browsingHistoryTools = browsingHistoryTools;
+        this.knowledgeTools = knowledgeTools;
     }
 
     @Override
@@ -41,6 +46,6 @@ public class GeneralAssistantAgent extends AbstractAssistantAgent {
 
     @Override
     protected Object[] tools() {
-        return new Object[]{browsingHistoryTools};
+        return new Object[]{browsingHistoryTools, knowledgeTools};
     }
 }

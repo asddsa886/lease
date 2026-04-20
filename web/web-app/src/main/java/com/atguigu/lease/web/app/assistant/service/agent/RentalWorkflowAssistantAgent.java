@@ -3,6 +3,7 @@ package com.atguigu.lease.web.app.assistant.service.agent;
 import com.atguigu.lease.web.app.assistant.dto.AssistantNextAction;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantApartmentTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantAppointmentTools;
+import com.atguigu.lease.web.app.assistant.service.tool.AssistantKnowledgeTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantLeaseOrderTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantRoomTools;
 import org.springframework.ai.chat.model.ChatModel;
@@ -15,17 +16,20 @@ public class RentalWorkflowAssistantAgent extends AbstractAssistantAgent {
     private final AssistantRoomTools roomTools;
     private final AssistantAppointmentTools appointmentTools;
     private final AssistantLeaseOrderTools leaseOrderTools;
+    private final AssistantKnowledgeTools knowledgeTools;
 
     public RentalWorkflowAssistantAgent(ChatModel chatModel,
                                         AssistantApartmentTools apartmentTools,
                                         AssistantRoomTools roomTools,
                                         AssistantAppointmentTools appointmentTools,
-                                        AssistantLeaseOrderTools leaseOrderTools) {
+                                        AssistantLeaseOrderTools leaseOrderTools,
+                                        AssistantKnowledgeTools knowledgeTools) {
         super(chatModel);
         this.apartmentTools = apartmentTools;
         this.roomTools = roomTools;
         this.appointmentTools = appointmentTools;
         this.leaseOrderTools = leaseOrderTools;
+        this.knowledgeTools = knowledgeTools;
     }
 
     @Override
@@ -59,6 +63,6 @@ public class RentalWorkflowAssistantAgent extends AbstractAssistantAgent {
 
     @Override
     protected Object[] tools() {
-        return new Object[]{apartmentTools, roomTools, appointmentTools, leaseOrderTools};
+        return new Object[]{apartmentTools, roomTools, appointmentTools, leaseOrderTools, knowledgeTools};
     }
 }

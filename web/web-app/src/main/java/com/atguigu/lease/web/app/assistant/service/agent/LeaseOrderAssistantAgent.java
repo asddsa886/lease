@@ -2,6 +2,7 @@ package com.atguigu.lease.web.app.assistant.service.agent;
 
 import com.atguigu.lease.web.app.assistant.dto.AssistantNextAction;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantApartmentTools;
+import com.atguigu.lease.web.app.assistant.service.tool.AssistantKnowledgeTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantLeaseOrderTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantRoomTools;
 import org.springframework.ai.chat.model.ChatModel;
@@ -13,15 +14,18 @@ public class LeaseOrderAssistantAgent extends AbstractAssistantAgent {
     private final AssistantLeaseOrderTools leaseOrderTools;
     private final AssistantRoomTools roomTools;
     private final AssistantApartmentTools apartmentTools;
+    private final AssistantKnowledgeTools knowledgeTools;
 
     public LeaseOrderAssistantAgent(ChatModel chatModel,
                                     AssistantLeaseOrderTools leaseOrderTools,
                                     AssistantRoomTools roomTools,
-                                    AssistantApartmentTools apartmentTools) {
+                                    AssistantApartmentTools apartmentTools,
+                                    AssistantKnowledgeTools knowledgeTools) {
         super(chatModel);
         this.leaseOrderTools = leaseOrderTools;
         this.roomTools = roomTools;
         this.apartmentTools = apartmentTools;
+        this.knowledgeTools = knowledgeTools;
     }
 
     @Override
@@ -51,6 +55,6 @@ public class LeaseOrderAssistantAgent extends AbstractAssistantAgent {
 
     @Override
     protected Object[] tools() {
-        return new Object[]{leaseOrderTools, roomTools, apartmentTools};
+        return new Object[]{leaseOrderTools, roomTools, apartmentTools, knowledgeTools};
     }
 }

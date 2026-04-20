@@ -68,6 +68,21 @@ lease:
     conversation-ttl: ${LEASE_ASSISTANT_CONVERSATION_TTL:7d}
     max-history-messages: ${LEASE_ASSISTANT_MAX_HISTORY_MESSAGES:12}
     stream-timeout: ${LEASE_ASSISTANT_STREAM_TIMEOUT:2m}
+    rag:
+      enabled: ${LEASE_ASSISTANT_RAG_ENABLED:false}
+      host: ${LEASE_ASSISTANT_RAG_HOST:localhost}
+      port: ${LEASE_ASSISTANT_RAG_PORT:19530}
+      connect-timeout-ms: ${LEASE_ASSISTANT_RAG_CONNECT_TIMEOUT_MS:5000}
+      collection-name: ${LEASE_ASSISTANT_RAG_COLLECTION:lease_assistant_knowledge}
+      id-field-name: ${LEASE_ASSISTANT_RAG_ID_FIELD:id}
+      title-field-name: ${LEASE_ASSISTANT_RAG_TITLE_FIELD:title}
+      content-field-name: ${LEASE_ASSISTANT_RAG_CONTENT_FIELD:content}
+      vector-field-name: ${LEASE_ASSISTANT_RAG_VECTOR_FIELD:vector}
+      metadata-field-name: ${LEASE_ASSISTANT_RAG_METADATA_FIELD:metadata}
+      top-k: ${LEASE_ASSISTANT_RAG_TOP_K:3}
+      max-snippet-length: ${LEASE_ASSISTANT_RAG_MAX_SNIPPET_LENGTH:240}
+      metric-type: ${LEASE_ASSISTANT_RAG_METRIC_TYPE:L2}
+      nprobe: ${LEASE_ASSISTANT_RAG_NPROBE:10}
   cache:
     hot-data-enabled: ${LEASE_CACHE_HOT_DATA_ENABLED:true}
     local-enabled: ${LEASE_CACHE_LOCAL_ENABLED:true}
