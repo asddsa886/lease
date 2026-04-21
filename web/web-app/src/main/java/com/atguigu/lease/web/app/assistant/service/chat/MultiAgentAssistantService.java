@@ -7,15 +7,13 @@ import com.atguigu.lease.web.app.assistant.dto.AssistantChatResponse;
 import com.atguigu.lease.web.app.assistant.dto.AssistantStreamPayload;
 import com.atguigu.lease.web.app.assistant.dto.AssistantTaskState;
 import com.atguigu.lease.web.app.assistant.service.agent.AbstractAssistantAgent;
-import com.atguigu.lease.web.app.assistant.service.agent.AppointmentAssistantAgent;
 import com.atguigu.lease.web.app.assistant.service.agent.AssistantAgentRoute;
 import com.atguigu.lease.web.app.assistant.service.agent.AssistantRoutingPolicy;
 import com.atguigu.lease.web.app.assistant.service.agent.AssistantSupervisorAgent;
 import com.atguigu.lease.web.app.assistant.service.agent.AssistantSupervisorDecision;
-import com.atguigu.lease.web.app.assistant.service.agent.GeneralAssistantAgent;
-import com.atguigu.lease.web.app.assistant.service.agent.LeaseOrderAssistantAgent;
-import com.atguigu.lease.web.app.assistant.service.agent.RentalWorkflowAssistantAgent;
-import com.atguigu.lease.web.app.assistant.service.agent.RoomSearchAssistantAgent;
+import com.atguigu.lease.web.app.assistant.service.agent.BusinessExecutionAssistantAgent;
+import com.atguigu.lease.web.app.assistant.service.agent.SearchQaAssistantAgent;
+import com.atguigu.lease.web.app.assistant.service.memory.AssistantLongTermMemoryService;
 import com.atguigu.lease.web.app.assistant.service.session.AssistantConversationMessage;
 import com.atguigu.lease.web.app.assistant.service.session.AssistantConversationSessionService;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantApartmentTools;
@@ -46,6 +44,7 @@ public class MultiAgentAssistantService implements AppAssistantService {
 
     private final AssistantPromptService promptService;
     private final AssistantConversationSessionService conversationSessionService;
+    private final AssistantLongTermMemoryService longTermMemoryService;
     private final AssistantProperties assistantProperties;
     private final AssistantSupervisorAgent supervisorAgent;
     private final Map<AssistantAgentRoute, AbstractAssistantAgent> agents;
@@ -60,17 +59,18 @@ public class MultiAgentAssistantService implements AppAssistantService {
                                       AssistantBrowsingHistoryTools browsingHistoryTools,
                                       AssistantAppointmentTools appointmentTools,
                                       AssistantLeaseOrderTools leaseOrderTools,
-                                      AssistantKnowledgeTools knowledgeTools) {
+                                      AssistantKnowledgeTools knowledgeTools,
+                                      AssistantLongTermMemoryService longTermMemoryService) {
         this.promptService = promptService;
         this.conversationSessionService = conversationSessionService;
+        this.longTermMemoryService = longTermMemoryService;
         this.assistantProperties = assistantProperties;
         this.supervisorAgent = new AssistantSupervisorAgent(chatModel, objectMapper, new AssistantRoutingPolicy());
         this.agents = new EnumMap<>(AssistantAgentRoute.class);
-        this.agents.put(AssistantAgentRoute.GENERAL, new GeneralAssistantAgent(chatModel, browsingHistoryTools, knowledgeTools));
-        this.agents.put(AssistantAgentRoute.ROOM_SEARCH, new RoomSearchAssistantAgent(chatModel, apartmentTools, roomTools, knowledgeTools));
-        this.agents.put(AssistantAgentRoute.APPOINTMENT, new AppointmentAssistantAgent(chatModel, appointmentTools, apartmentTools, roomTools, knowledgeTools));
-        this.agents.put(AssistantAgentRoute.LEASE_ORDER, new LeaseOrderAssistantAgent(chatModel, leaseOrderTools, roomTools, apartmentTools, knowledgeTools));
-        this.agents.put(AssistantAgentRoute.RENTAL_WORKFLOW, new RentalWorkflowAssistantAgent(chatModel, apartmentTools, roomTools, appointmentTools, leaseOrderTools, knowledgeTools));
+        this.agents.put(AssistantAgentRoute.SEARCH_QA,
+                new SearchQaAssistantAgent(chatModel, apartmentTools, roomTools, browsingHistoryTools, knowledgeTools));
+        this.agents.put(AssistantAgentRoute.BUSINESS_EXECUTION,
+                new BusinessExecutionAssistantAgent(chatModel, appointmentTools, leaseOrderTools, apartmentTools, roomTools, knowledgeTools));
     }
 
     @Override
@@ -78,6 +78,7 @@ public class MultiAgentAssistantService implements AppAssistantService {
         String userMessage = request.getMessage().trim();
         String conversationId = conversationSessionService.resolveConversationId(currentUser.getId(), request.getConversationId());
         List<AssistantConversationMessage> history = conversationSessionService.getMessages(currentUser.getId(), conversationId);
+        String longTermMemoryPrompt = prepareLongTermMemory(currentUser.getId(), userMessage);
         AssistantSupervisorDecision decision = supervisorAgent.decide(currentUser, history, userMessage);
         AbstractAssistantAgent agent = resolveAgent(decision);
 
@@ -88,6 +89,7 @@ public class MultiAgentAssistantService implements AppAssistantService {
                     userMessage,
                     decision,
                     promptService,
+                    longTermMemoryPrompt,
                     buildToolContext(currentUser, conversationId, AssistantToolEventEmitter.noop())
             );
 
@@ -116,6 +118,7 @@ public class MultiAgentAssistantService implements AppAssistantService {
         String conversationId = conversationSessionService.resolveConversationId(currentUser.getId(), request.getConversationId());
         String userMessage = request.getMessage().trim();
         List<AssistantConversationMessage> history = conversationSessionService.getMessages(currentUser.getId(), conversationId);
+        String longTermMemoryPrompt = prepareLongTermMemory(currentUser.getId(), userMessage);
         AssistantSupervisorDecision decision = supervisorAgent.decide(currentUser, history, userMessage);
         AbstractAssistantAgent agent = resolveAgent(decision);
 
@@ -144,6 +147,7 @@ public class MultiAgentAssistantService implements AppAssistantService {
                     userMessage,
                     decision,
                     promptService,
+                    longTermMemoryPrompt,
                     buildToolContext(currentUser, conversationId, toolEventEmitter)
             );
         } catch (Exception e) {
@@ -217,7 +221,7 @@ public class MultiAgentAssistantService implements AppAssistantService {
     }
 
     private AbstractAssistantAgent resolveAgent(AssistantSupervisorDecision decision) {
-        return agents.getOrDefault(decision.route(), agents.get(AssistantAgentRoute.GENERAL));
+        return agents.getOrDefault(decision.route(), agents.get(AssistantAgentRoute.SEARCH_QA));
     }
 
     private Map<String, Object> buildToolContext(LoginUser currentUser,
@@ -254,6 +258,16 @@ public class MultiAgentAssistantService implements AppAssistantService {
         Disposable subscription = subscriptionRef.getAndSet(null);
         if (subscription != null && !subscription.isDisposed()) {
             subscription.dispose();
+        }
+    }
+
+    private String prepareLongTermMemory(Long userId, String userMessage) {
+        try {
+            longTermMemoryService.rememberUserMessage(userId, userMessage);
+            return longTermMemoryService.buildMemoryPrompt(userId);
+        } catch (Exception e) {
+            log.warn("Failed to load assistant long-term memory, userId={}", userId, e);
+            return "";
         }
     }
 }

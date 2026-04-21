@@ -17,19 +17,15 @@ public class AssistantSupervisorAgent {
 
     private static final String SUPERVISOR_PROMPT = """
             你是租房助手的路由协调器，负责判断当前请求应该交给哪个专员处理。
-
             可选路由：
-            - general：问候、能力说明、模糊问题、暂不支持的需求
-            - room_search：找房、筛选、比较、推荐公寓或房间
-            - appointment：预约列表、创建预约、取消预约、修改预约
-            - lease_order：订单列表、订单详情、创建订单、取消订单
-            - rental_workflow：跨阶段复合任务，例如先找房，再预约，或者先推荐，再下单
+            - search_qa：问候、能力说明、房源检索、平台规则说明、知识问答、浏览记录查询
+            - business_execution：预约查询/创建/取消/改约、签约订单查询/创建/取消、其他需要执行业务动作的请求
 
             你只能输出 JSON，格式必须严格如下：
-            {"route":"general|room_search|appointment|lease_order|rental_workflow","reason":"...","goal":"..."}
+            {"route":"search_qa|business_execution","reason":"...","goal":"..."}
 
-            如果用户是在做链路式任务，例如“先推荐三套，再帮我预约”或“先找房，再帮我下单”，优先选择 rental_workflow。
-            route 字段必须使用英文枚举值，其他解释用中文。
+            如果用户请求中包含“创建/取消/改约/下单/提交/支付”等执行动作，优先选择 business_execution。
+            route 字段必须使用英文枚举值，reason 和 goal 用中文。
             """;
 
     private final ChatClient chatClient;
@@ -57,8 +53,9 @@ public class AssistantSupervisorAgent {
             if (parsedDecision.route() == null) {
                 return AssistantSupervisorDecision.fallback(fallbackRoute, "路由结果为空，已使用规则兜底");
             }
-            if (parsedDecision.route() == AssistantAgentRoute.GENERAL && fallbackRoute != AssistantAgentRoute.GENERAL) {
-                return AssistantSupervisorDecision.fallback(fallbackRoute, "大模型路由过于宽泛，已使用规则兜底");
+            if (parsedDecision.route() == AssistantAgentRoute.SEARCH_QA
+                    && fallbackRoute == AssistantAgentRoute.BUSINESS_EXECUTION) {
+                return AssistantSupervisorDecision.fallback(fallbackRoute, "检测到业务执行意图，已按规则切换执行专员");
             }
             return parsedDecision;
         } catch (Exception ignored) {

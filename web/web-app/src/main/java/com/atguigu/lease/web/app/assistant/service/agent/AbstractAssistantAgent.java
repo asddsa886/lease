@@ -35,12 +35,14 @@ public abstract class AbstractAssistantAgent {
                        String userMessage,
                        AssistantSupervisorDecision decision,
                        AssistantPromptService promptService,
+                       String longTermMemoryPrompt,
                        Map<String, Object> toolContext) {
+        String instructions = mergeInstructions(specialistInstructions(decision), longTermMemoryPrompt);
         List<Message> messages = promptService.buildPromptMessages(
                 currentUser,
                 history,
                 userMessage,
-                specialistInstructions(decision)
+                instructions
         );
         if (tools().length > 0) {
             return chatClient.prompt()
@@ -61,12 +63,14 @@ public abstract class AbstractAssistantAgent {
                                String userMessage,
                                AssistantSupervisorDecision decision,
                                AssistantPromptService promptService,
+                               String longTermMemoryPrompt,
                                Map<String, Object> toolContext) {
+        String instructions = mergeInstructions(specialistInstructions(decision), longTermMemoryPrompt);
         List<Message> messages = promptService.buildPromptMessages(
                 currentUser,
                 history,
                 userMessage,
-                specialistInstructions(decision)
+                instructions
         );
         if (tools().length > 0) {
             return chatClient.prompt()
@@ -80,5 +84,12 @@ public abstract class AbstractAssistantAgent {
                 .messages(messages)
                 .stream()
                 .content();
+    }
+
+    private String mergeInstructions(String specialistInstructions, String longTermMemoryPrompt) {
+        if (longTermMemoryPrompt == null || longTermMemoryPrompt.isBlank()) {
+            return specialistInstructions;
+        }
+        return specialistInstructions + "\n\n" + longTermMemoryPrompt.trim();
     }
 }

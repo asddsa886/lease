@@ -4,11 +4,8 @@ import java.util.Arrays;
 
 public enum AssistantAgentRoute {
 
-    GENERAL("general", "general", "通用助理"),
-    ROOM_SEARCH("room_search", "room_search", "找房专员"),
-    APPOINTMENT("appointment", "appointment", "预约专员"),
-    LEASE_ORDER("lease_order", "lease_order", "订单专员"),
-    RENTAL_WORKFLOW("rental_workflow", "workflow", "租房任务编排专员");
+    SEARCH_QA("search_qa", "search_qa", "检索问答专员"),
+    BUSINESS_EXECUTION("business_execution", "business_execution", "业务执行专员");
 
     private final String code;
     private final String taskType;

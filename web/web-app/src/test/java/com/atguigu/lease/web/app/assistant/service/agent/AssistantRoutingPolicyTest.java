@@ -9,26 +9,26 @@ class AssistantRoutingPolicyTest {
     private final AssistantRoutingPolicy routingPolicy = new AssistantRoutingPolicy();
 
     @Test
-    void shouldRouteRoomSearchRequests() {
-        assertThat(routingPolicy.classify("帮我查北京 3000 以内的房源"))
-                .isEqualTo(AssistantAgentRoute.ROOM_SEARCH);
+    void shouldRouteSearchRequestsToSearchQa() {
+        assertThat(routingPolicy.classify("帮我查北京3000以内的房源"))
+                .isEqualTo(AssistantAgentRoute.SEARCH_QA);
     }
 
     @Test
-    void shouldRouteAppointmentRequests() {
+    void shouldRouteAppointmentRequestsToBusinessExecution() {
         assertThat(routingPolicy.classify("帮我把预约改到周六下午三点"))
-                .isEqualTo(AssistantAgentRoute.APPOINTMENT);
+                .isEqualTo(AssistantAgentRoute.BUSINESS_EXECUTION);
     }
 
     @Test
-    void shouldRouteLeaseOrderRequests() {
+    void shouldRouteLeaseOrderRequestsToBusinessExecution() {
         assertThat(routingPolicy.classify("帮我看看我的签约订单"))
-                .isEqualTo(AssistantAgentRoute.LEASE_ORDER);
+                .isEqualTo(AssistantAgentRoute.BUSINESS_EXECUTION);
     }
 
     @Test
-    void shouldRouteCompositeWorkflowRequests() {
-        assertThat(routingPolicy.classify("帮我找北京 3000 到 4000 的房子，挑三套最合适的，再帮我约周六下午看房"))
-                .isEqualTo(AssistantAgentRoute.RENTAL_WORKFLOW);
+    void shouldRouteCompositeBusinessRequestsToBusinessExecution() {
+        assertThat(routingPolicy.classify("帮我先找房再预约看房"))
+                .isEqualTo(AssistantAgentRoute.BUSINESS_EXECUTION);
     }
 }

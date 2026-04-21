@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS `assistant_knowledge_document` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `title` varchar(255) NOT NULL COMMENT '文档标题',
+  `file_name` varchar(255) NOT NULL COMMENT '原始文件名',
+  `bucket` varchar(128) NOT NULL COMMENT 'MinIO 桶名',
+  `object_key` varchar(512) NOT NULL COMMENT 'MinIO 对象键',
+  `scope` tinyint NOT NULL COMMENT '知识范围：1-平台通用 2-公寓知识',
+  `biz_id` bigint DEFAULT NULL COMMENT '业务对象 id，GLOBAL 可为空',
+  `status` tinyint NOT NULL COMMENT '索引状态：1-已上传 2-索引中 3-已索引 4-索引失败',
+  `content_type` varchar(128) DEFAULT NULL COMMENT '文件内容类型',
+  `file_size` bigint DEFAULT NULL COMMENT '文件大小，单位字节',
+  `chunk_count` int DEFAULT 0 COMMENT '切片数量',
+  `version` int DEFAULT 1 COMMENT '索引版本',
+  `last_index_time` datetime DEFAULT NULL COMMENT '最后索引时间',
+  `remark` varchar(500) DEFAULT NULL COMMENT '备注',
+  `last_error` varchar(500) DEFAULT NULL COMMENT '最近一次索引失败原因',
+  `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `is_deleted` tinyint DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (`id`),
+  KEY `idx_scope_biz_id` (`scope`, `biz_id`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='助手知识文档表';

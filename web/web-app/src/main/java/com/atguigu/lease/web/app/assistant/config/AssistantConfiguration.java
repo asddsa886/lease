@@ -4,6 +4,7 @@ import com.atguigu.lease.web.app.assistant.service.chat.AppAssistantService;
 import com.atguigu.lease.web.app.assistant.service.chat.AssistantPromptService;
 import com.atguigu.lease.web.app.assistant.service.chat.DisabledAssistantService;
 import com.atguigu.lease.web.app.assistant.service.chat.MultiAgentAssistantService;
+import com.atguigu.lease.web.app.assistant.service.memory.AssistantLongTermMemoryService;
 import com.atguigu.lease.web.app.assistant.service.session.AssistantConversationSessionService;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantApartmentTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantAppointmentTools;
@@ -35,7 +36,8 @@ public class AssistantConfiguration {
                                                    AssistantBrowsingHistoryTools browsingHistoryTools,
                                                    AssistantAppointmentTools appointmentTools,
                                                    AssistantLeaseOrderTools leaseOrderTools,
-                                                   AssistantKnowledgeTools knowledgeTools) {
+                                                   AssistantKnowledgeTools knowledgeTools,
+                                                   AssistantLongTermMemoryService longTermMemoryService) {
         ChatModel chatModel = chatModelProvider.getIfAvailable();
         if (assistantProperties.isEnabled() && chatModel != null) {
             return new MultiAgentAssistantService(
@@ -49,7 +51,8 @@ public class AssistantConfiguration {
                     browsingHistoryTools,
                     appointmentTools,
                     leaseOrderTools,
-                    knowledgeTools
+                    knowledgeTools,
+                    longTermMemoryService
             );
         }
         return new DisabledAssistantService(promptService);

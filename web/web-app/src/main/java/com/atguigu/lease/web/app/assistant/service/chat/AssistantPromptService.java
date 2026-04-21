@@ -22,12 +22,6 @@ public class AssistantPromptService {
 
     public List<Message> buildPromptMessages(LoginUser currentUser,
                                              List<AssistantConversationMessage> history,
-                                             String userMessage) {
-        return buildPromptMessages(currentUser, history, userMessage, null);
-    }
-
-    public List<Message> buildPromptMessages(LoginUser currentUser,
-                                             List<AssistantConversationMessage> history,
                                              String userMessage,
                                              String extraInstructions) {
         List<Message> messages = new ArrayList<>();
@@ -68,7 +62,7 @@ public class AssistantPromptService {
 
     public List<AssistantNextAction> defaultNextActions() {
         return List.of(
-                new AssistantNextAction("查房源", "帮我查北京 3000 以内的房源"),
+                new AssistantNextAction("查房源", "帮我查北京3000以内的房源"),
                 new AssistantNextAction("查预约", "帮我看看我的预约"),
                 new AssistantNextAction("查订单", "帮我看看我的签约订单")
         );
@@ -84,7 +78,7 @@ public class AssistantPromptService {
                 你的通用职责：
                 1. 帮用户理解公寓、房间、预约和签约订单相关信息。
                 2. 只要涉及平台数据查询或业务动作，就优先调用工具。
-                3. 只有在信息缺失会显著影响结果时，才追问用户。
+                3. 只有在信息缺失会明显影响结果时，才追问用户。
 
                 你的硬性规则：
                 - 不要编造公寓、房间、预约或订单数据。
@@ -94,7 +88,7 @@ public class AssistantPromptService {
                 - 如果能用中文名称确认信息，就不要优先向用户索要内部数字ID。
                 - 创建、取消、改期这类动作执行成功后，必须明确复述最终结果。
                 - 预约时间和起租日期都按中国时区本地语义理解。
-                - 如果用户说“明天下午12点”或“周六下午3点”，必须保持这个本地时间语义，绝不能转换成 UTC。
+                - 如果用户说“明天下午2点”或“周六下午3点”，必须保持这个本地时间语义，不能转换成 UTC。
                 """.formatted(
                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
                 currentUser.getId(),
@@ -103,11 +97,11 @@ public class AssistantPromptService {
     }
 
     private String buildSystemPrompt(LoginUser currentUser, String extraInstructions) {
-        String basePrompt = buildBaseSystemPrompt(currentUser);
-        if (extraInstructions == null || extraInstructions.isBlank()) {
-            return basePrompt;
+        StringBuilder builder = new StringBuilder(buildBaseSystemPrompt(currentUser));
+        if (extraInstructions != null && !extraInstructions.isBlank()) {
+            builder.append("\n\n当前专员补充规则：\n").append(extraInstructions.trim());
         }
-        return basePrompt + "\n\n当前专员补充规则：\n" + extraInstructions.trim();
+        return builder.toString();
     }
 
     private String normalizeReply(String reply) {

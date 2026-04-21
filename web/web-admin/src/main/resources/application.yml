@@ -1,6 +1,21 @@
 server:
   port: 8080
 spring:
+  ai:
+    model:
+      embedding: ${SPRING_AI_EMBEDDING_MODEL:ollama}
+      chat: ${SPRING_AI_CHAT_MODEL:none}
+      image: ${SPRING_AI_IMAGE_MODEL:none}
+      moderation: ${SPRING_AI_MODERATION_MODEL:none}
+      audio:
+        speech: ${SPRING_AI_AUDIO_SPEECH_MODEL:none}
+        transcription: ${SPRING_AI_AUDIO_TRANSCRIPTION_MODEL:none}
+    ollama:
+      base-url: ${SPRING_AI_OLLAMA_BASE_URL:http://localhost:11434}
+      embedding:
+        model: ${SPRING_AI_OLLAMA_EMBEDDING_MODEL:qwen3-embedding:0.6b}
+        options:
+          model: ${SPRING_AI_OLLAMA_EMBEDDING_OPTIONS_MODEL:qwen3-embedding:0.6b}
   datasource:
     type: com.zaxxer.hikari.HikariDataSource
     url: jdbc:mysql://127.0.0.1:3306/lease?useUnicode=true&characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=GMT%2b8
@@ -42,6 +57,27 @@ mq:
   enabled: ${MQ_ENABLED:true}
 
 lease:
+  assistant:
+    rag:
+      enabled: ${LEASE_ASSISTANT_RAG_ENABLED:false}
+      host: ${LEASE_ASSISTANT_RAG_HOST:localhost}
+      port: ${LEASE_ASSISTANT_RAG_PORT:19530}
+      connect-timeout-ms: ${LEASE_ASSISTANT_RAG_CONNECT_TIMEOUT_MS:5000}
+      collection-name: ${LEASE_ASSISTANT_RAG_COLLECTION:lease_assistant_knowledge}
+      id-field-name: ${LEASE_ASSISTANT_RAG_ID_FIELD:id}
+      title-field-name: ${LEASE_ASSISTANT_RAG_TITLE_FIELD:title}
+      content-field-name: ${LEASE_ASSISTANT_RAG_CONTENT_FIELD:content}
+      vector-field-name: ${LEASE_ASSISTANT_RAG_VECTOR_FIELD:vector}
+      metadata-field-name: ${LEASE_ASSISTANT_RAG_METADATA_FIELD:metadata}
+      metric-type: ${LEASE_ASSISTANT_RAG_METRIC_TYPE:L2}
+      nprobe: ${LEASE_ASSISTANT_RAG_NPROBE:10}
+      chunk-max-length: ${LEASE_ASSISTANT_RAG_CHUNK_MAX_LENGTH:600}
+      chunk-overlap: ${LEASE_ASSISTANT_RAG_CHUNK_OVERLAP:80}
+      title-max-length: ${LEASE_ASSISTANT_RAG_TITLE_MAX_LENGTH:255}
+      content-max-length: ${LEASE_ASSISTANT_RAG_CONTENT_MAX_LENGTH:4000}
+      metadata-max-length: ${LEASE_ASSISTANT_RAG_METADATA_MAX_LENGTH:2000}
+      index-type: ${LEASE_ASSISTANT_RAG_INDEX_TYPE:IVF_FLAT}
+      nlist: ${LEASE_ASSISTANT_RAG_NLIST:128}
   mq:
     order-timeout-ttl-ms: ${LEASE_MQ_ORDER_TIMEOUT_TTL_MS:900000}
 

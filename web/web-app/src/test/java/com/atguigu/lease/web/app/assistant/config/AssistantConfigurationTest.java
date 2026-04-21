@@ -4,6 +4,7 @@ import com.atguigu.lease.web.app.assistant.service.chat.AppAssistantService;
 import com.atguigu.lease.web.app.assistant.service.chat.AssistantPromptService;
 import com.atguigu.lease.web.app.assistant.service.chat.DisabledAssistantService;
 import com.atguigu.lease.web.app.assistant.service.chat.MultiAgentAssistantService;
+import com.atguigu.lease.web.app.assistant.service.memory.AssistantLongTermMemoryService;
 import com.atguigu.lease.web.app.assistant.service.session.AssistantConversationSessionService;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantApartmentTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantAppointmentTools;
@@ -31,6 +32,7 @@ class AssistantConfigurationTest {
             .withBean(AssistantBrowsingHistoryTools.class, () -> mock(AssistantBrowsingHistoryTools.class))
             .withBean(AssistantAppointmentTools.class, () -> mock(AssistantAppointmentTools.class))
             .withBean(AssistantKnowledgeTools.class, () -> mock(AssistantKnowledgeTools.class))
+            .withBean(AssistantLongTermMemoryService.class, () -> mock(AssistantLongTermMemoryService.class))
             .withBean(AssistantLeaseOrderTools.class, () -> mock(AssistantLeaseOrderTools.class));
 
     @Test

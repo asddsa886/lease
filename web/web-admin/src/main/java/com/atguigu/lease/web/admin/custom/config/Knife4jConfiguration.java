@@ -73,4 +73,12 @@ public class Knife4jConfiguration {
                         "/admin/user/**"
                 ).build();
     }
+
+    @Bean
+    public GroupedOpenApi assistantAPI() {
+        return GroupedOpenApi.builder().group("智能助手管理").
+                pathsToMatch(
+                        "/admin/assistant/**"
+                ).build();
+    }
 }
