@@ -1,18 +1,12 @@
 package com.atguigu.lease.web.app.assistant.service.chat;
 
+import com.alibaba.cloud.ai.graph.advisors.SkillPromptAugmentAdvisor;
 import com.atguigu.lease.common.login.LoginUser;
 import com.atguigu.lease.web.app.assistant.config.AssistantProperties;
 import com.atguigu.lease.web.app.assistant.dto.AssistantChatRequest;
 import com.atguigu.lease.web.app.assistant.dto.AssistantChatResponse;
 import com.atguigu.lease.web.app.assistant.dto.AssistantStreamPayload;
 import com.atguigu.lease.web.app.assistant.dto.AssistantTaskState;
-import com.atguigu.lease.web.app.assistant.service.agent.AbstractAssistantAgent;
-import com.atguigu.lease.web.app.assistant.service.agent.AssistantAgentRoute;
-import com.atguigu.lease.web.app.assistant.service.agent.AssistantRoutingPolicy;
-import com.atguigu.lease.web.app.assistant.service.agent.AssistantSupervisorAgent;
-import com.atguigu.lease.web.app.assistant.service.agent.AssistantSupervisorDecision;
-import com.atguigu.lease.web.app.assistant.service.agent.BusinessExecutionAssistantAgent;
-import com.atguigu.lease.web.app.assistant.service.agent.SearchQaAssistantAgent;
 import com.atguigu.lease.web.app.assistant.service.memory.AssistantLongTermMemoryService;
 import com.atguigu.lease.web.app.assistant.service.session.AssistantConversationMessage;
 import com.atguigu.lease.web.app.assistant.service.session.AssistantConversationSessionService;
@@ -24,15 +18,16 @@ import com.atguigu.lease.web.app.assistant.service.tool.AssistantLeaseOrderTools
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantRoomTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantToolContextSupport;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantToolEventEmitter;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 
 import java.io.IOException;
-import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,37 +35,45 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
-public class MultiAgentAssistantService implements AppAssistantService {
+public class OfficialSkillsAssistantService implements AppAssistantService {
 
+    private static final String TASK_TYPE = "assistant";
+
+    private final ChatClient chatClient;
     private final AssistantPromptService promptService;
     private final AssistantConversationSessionService conversationSessionService;
     private final AssistantLongTermMemoryService longTermMemoryService;
     private final AssistantProperties assistantProperties;
-    private final AssistantSupervisorAgent supervisorAgent;
-    private final Map<AssistantAgentRoute, AbstractAssistantAgent> agents;
 
-    public MultiAgentAssistantService(ChatModel chatModel,
-                                      ObjectMapper objectMapper,
-                                      AssistantPromptService promptService,
-                                      AssistantConversationSessionService conversationSessionService,
-                                      AssistantProperties assistantProperties,
-                                      AssistantApartmentTools apartmentTools,
-                                      AssistantRoomTools roomTools,
-                                      AssistantBrowsingHistoryTools browsingHistoryTools,
-                                      AssistantAppointmentTools appointmentTools,
-                                      AssistantLeaseOrderTools leaseOrderTools,
-                                      AssistantKnowledgeTools knowledgeTools,
-                                      AssistantLongTermMemoryService longTermMemoryService) {
+    public OfficialSkillsAssistantService(ChatModel chatModel,
+                                          AssistantPromptService promptService,
+                                          AssistantConversationSessionService conversationSessionService,
+                                          AssistantProperties assistantProperties,
+                                          AssistantApartmentTools apartmentTools,
+                                          AssistantRoomTools roomTools,
+                                          AssistantBrowsingHistoryTools browsingHistoryTools,
+                                          AssistantAppointmentTools appointmentTools,
+                                          AssistantLeaseOrderTools leaseOrderTools,
+                                          AssistantKnowledgeTools knowledgeTools,
+                                          AssistantLongTermMemoryService longTermMemoryService,
+                                          SkillPromptAugmentAdvisor skillPromptAugmentAdvisor,
+                                          ToolCallback readSkillToolCallback) {
+        this.chatClient = ChatClient.builder(chatModel)
+                .defaultAdvisors(skillPromptAugmentAdvisor)
+                .defaultTools(
+                        apartmentTools,
+                        roomTools,
+                        browsingHistoryTools,
+                        appointmentTools,
+                        leaseOrderTools,
+                        knowledgeTools
+                )
+                .defaultToolCallbacks(readSkillToolCallback)
+                .build();
         this.promptService = promptService;
         this.conversationSessionService = conversationSessionService;
         this.longTermMemoryService = longTermMemoryService;
         this.assistantProperties = assistantProperties;
-        this.supervisorAgent = new AssistantSupervisorAgent(chatModel, objectMapper, new AssistantRoutingPolicy());
-        this.agents = new EnumMap<>(AssistantAgentRoute.class);
-        this.agents.put(AssistantAgentRoute.SEARCH_QA,
-                new SearchQaAssistantAgent(chatModel, apartmentTools, roomTools, browsingHistoryTools, knowledgeTools));
-        this.agents.put(AssistantAgentRoute.BUSINESS_EXECUTION,
-                new BusinessExecutionAssistantAgent(chatModel, appointmentTools, leaseOrderTools, apartmentTools, roomTools, knowledgeTools));
     }
 
     @Override
@@ -79,36 +82,31 @@ public class MultiAgentAssistantService implements AppAssistantService {
         String conversationId = conversationSessionService.resolveConversationId(currentUser.getId(), request.getConversationId());
         List<AssistantConversationMessage> history = conversationSessionService.getMessages(currentUser.getId(), conversationId);
         String longTermMemoryPrompt = prepareLongTermMemory(currentUser.getId(), userMessage);
-        AssistantSupervisorDecision decision = supervisorAgent.decide(currentUser, history, userMessage);
-        AbstractAssistantAgent agent = resolveAgent(decision);
+        List<Message> messages = promptService.buildPromptMessages(currentUser, history, userMessage, longTermMemoryPrompt);
 
         try {
-            String reply = agent.chat(
-                    currentUser,
-                    history,
-                    userMessage,
-                    decision,
-                    promptService,
-                    longTermMemoryPrompt,
-                    buildToolContext(currentUser, conversationId, AssistantToolEventEmitter.noop())
-            );
+            String reply = chatClient.prompt()
+                    .messages(messages)
+                    .toolContext(buildToolContext(currentUser, conversationId, AssistantToolEventEmitter.noop()))
+                    .call()
+                    .content();
 
             AssistantChatResponse response = promptService.buildResponse(
                     conversationId,
                     reply,
-                    new AssistantTaskState(decision.route().taskType(), "completed"),
-                    agent.nextActions()
+                    new AssistantTaskState(TASK_TYPE, "completed"),
+                    null
             );
             conversationSessionService.appendConversation(currentUser.getId(), conversationId, userMessage, response.getReply());
             return response;
         } catch (Exception e) {
-            log.error("Multi-agent assistant chat failed, conversationId={}, userId={}, route={}",
-                    conversationId, currentUser.getId(), decision.route(), e);
+            log.error("Official skills assistant chat failed, conversationId={}, userId={}",
+                    conversationId, currentUser.getId(), e);
             return promptService.buildResponse(
                     conversationId,
                     "AI 助手处理失败，请稍后再试。",
-                    new AssistantTaskState(decision.route().taskType(), "failed"),
-                    agent.nextActions()
+                    new AssistantTaskState(TASK_TYPE, "failed"),
+                    null
             );
         }
     }
@@ -119,8 +117,7 @@ public class MultiAgentAssistantService implements AppAssistantService {
         String userMessage = request.getMessage().trim();
         List<AssistantConversationMessage> history = conversationSessionService.getMessages(currentUser.getId(), conversationId);
         String longTermMemoryPrompt = prepareLongTermMemory(currentUser.getId(), userMessage);
-        AssistantSupervisorDecision decision = supervisorAgent.decide(currentUser, history, userMessage);
-        AbstractAssistantAgent agent = resolveAgent(decision);
+        List<Message> messages = promptService.buildPromptMessages(currentUser, history, userMessage, longTermMemoryPrompt);
 
         SseEmitter emitter = new SseEmitter(assistantProperties.getStreamTimeout().toMillis());
         StringBuilder assistantReply = new StringBuilder();
@@ -136,26 +133,22 @@ public class MultiAgentAssistantService implements AppAssistantService {
 
         sendEvent(emitter, "start", AssistantStreamPayload.builder()
                 .conversationId(conversationId)
-                .message("已分配给" + decision.route().displayName() + "，开始处理")
+                .message("助手已开始处理，本轮会按官方 Skills 机制选择规则与工具。")
                 .build(), emitterClosed);
 
         Flux<String> contentFlux;
         try {
-            contentFlux = agent.stream(
-                    currentUser,
-                    history,
-                    userMessage,
-                    decision,
-                    promptService,
-                    longTermMemoryPrompt,
-                    buildToolContext(currentUser, conversationId, toolEventEmitter)
-            );
+            contentFlux = chatClient.prompt()
+                    .messages(messages)
+                    .toolContext(buildToolContext(currentUser, conversationId, toolEventEmitter))
+                    .stream()
+                    .content();
         } catch (Exception e) {
-            log.error("Multi-agent stream init failed, conversationId={}, userId={}, route={}",
-                    conversationId, currentUser.getId(), decision.route(), e);
+            log.error("Official skills assistant stream init failed, conversationId={}, userId={}",
+                    conversationId, currentUser.getId(), e);
             sendEvent(emitter, "error", AssistantStreamPayload.builder()
                     .conversationId(conversationId)
-                    .message("AI 流式会话初始化失败，请检查模型配置。")
+                    .message("AI 流式会话初始化失败，请检查模型与 Skills 配置。")
                     .build(), emitterClosed);
             safeComplete(emitter, emitterClosed);
             return emitter;
@@ -173,8 +166,8 @@ public class MultiAgentAssistantService implements AppAssistantService {
                     }
                 },
                 error -> {
-                    log.error("Multi-agent streaming failed, conversationId={}, userId={}, route={}",
-                            conversationId, currentUser.getId(), decision.route(), error);
+                    log.error("Official skills assistant streaming failed, conversationId={}, userId={}",
+                            conversationId, currentUser.getId(), error);
                     sendEvent(emitter, "error", AssistantStreamPayload.builder()
                             .conversationId(conversationId)
                             .message("AI 流式会话执行失败，请稍后再试。")
@@ -185,8 +178,8 @@ public class MultiAgentAssistantService implements AppAssistantService {
                     AssistantChatResponse response = promptService.buildResponse(
                             conversationId,
                             assistantReply.toString(),
-                            new AssistantTaskState(decision.route().taskType(), "completed"),
-                            agent.nextActions()
+                            new AssistantTaskState(TASK_TYPE, "completed"),
+                            null
                     );
                     conversationSessionService.appendConversation(currentUser.getId(), conversationId, userMessage, response.getReply());
                     sendEvent(emitter, "complete", AssistantStreamPayload.builder()
@@ -202,14 +195,14 @@ public class MultiAgentAssistantService implements AppAssistantService {
         subscriptionRef.set(subscription);
 
         emitter.onTimeout(() -> {
-            log.warn("Multi-agent streaming timed out, conversationId={}, userId={}, route={}",
-                    conversationId, currentUser.getId(), decision.route());
+            log.warn("Official skills assistant streaming timed out, conversationId={}, userId={}",
+                    conversationId, currentUser.getId());
             disposeSubscription(subscriptionRef);
             safeComplete(emitter, emitterClosed);
         });
         emitter.onError(error -> {
-            log.warn("Multi-agent emitter error, conversationId={}, userId={}, route={}",
-                    conversationId, currentUser.getId(), decision.route(), error);
+            log.warn("Official skills assistant emitter error, conversationId={}, userId={}",
+                    conversationId, currentUser.getId(), error);
             disposeSubscription(subscriptionRef);
             emitterClosed.set(true);
         });
@@ -218,10 +211,6 @@ public class MultiAgentAssistantService implements AppAssistantService {
             emitterClosed.set(true);
         });
         return emitter;
-    }
-
-    private AbstractAssistantAgent resolveAgent(AssistantSupervisorDecision decision) {
-        return agents.getOrDefault(decision.route(), agents.get(AssistantAgentRoute.SEARCH_QA));
     }
 
     private Map<String, Object> buildToolContext(LoginUser currentUser,
