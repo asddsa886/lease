@@ -4,9 +4,8 @@ import com.atguigu.lease.web.app.assistant.service.chat.AppAssistantService;
 import com.atguigu.lease.web.app.assistant.service.chat.AssistantPromptService;
 import com.atguigu.lease.web.app.assistant.service.chat.DisabledAssistantService;
 import com.atguigu.lease.web.app.assistant.service.chat.OfficialSkillsAssistantService;
-import com.atguigu.lease.web.app.assistant.service.memory.AssistantLongTermMemoryService;
-import com.atguigu.lease.web.app.assistant.service.session.AssistantConversationSessionService;
-import com.atguigu.lease.web.app.assistant.service.tool.AssistantApartmentTools;
+import com.atguigu.lease.web.app.assistant.service.memory.RedisAssistantLongTermMemoryService;
+import com.atguigu.lease.web.app.assistant.service.session.RedisAssistantConversationSessionService;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantAppointmentTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantBrowsingHistoryTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantKnowledgeTools;
@@ -30,15 +29,14 @@ public class AssistantConfiguration {
     @ConditionalOnMissingBean(AppAssistantService.class)
     public AppAssistantService appAssistantService(ObjectProvider<ChatModel> chatModelProvider,
                                                    AssistantPromptService promptService,
-                                                   AssistantConversationSessionService conversationSessionService,
+                                                   RedisAssistantConversationSessionService conversationSessionService,
                                                    AssistantProperties assistantProperties,
-                                                   AssistantApartmentTools apartmentTools,
                                                    AssistantRoomTools roomTools,
                                                    AssistantBrowsingHistoryTools browsingHistoryTools,
                                                    AssistantAppointmentTools appointmentTools,
                                                    AssistantLeaseOrderTools leaseOrderTools,
                                                    AssistantKnowledgeTools knowledgeTools,
-                                                   AssistantLongTermMemoryService longTermMemoryService,
+                                                   RedisAssistantLongTermMemoryService longTermMemoryService,
                                                    SkillPromptAugmentAdvisor skillPromptAugmentAdvisor,
                                                    @Qualifier("assistantReadSkillToolCallback") ToolCallback readSkillToolCallback) {
         ChatModel chatModel = chatModelProvider.getIfAvailable();
@@ -48,7 +46,6 @@ public class AssistantConfiguration {
                     promptService,
                     conversationSessionService,
                     assistantProperties,
-                    apartmentTools,
                     roomTools,
                     browsingHistoryTools,
                     appointmentTools,

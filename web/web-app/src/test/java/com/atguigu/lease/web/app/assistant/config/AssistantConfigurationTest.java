@@ -4,9 +4,8 @@ import com.atguigu.lease.web.app.assistant.service.chat.AppAssistantService;
 import com.atguigu.lease.web.app.assistant.service.chat.AssistantPromptService;
 import com.atguigu.lease.web.app.assistant.service.chat.DisabledAssistantService;
 import com.atguigu.lease.web.app.assistant.service.chat.OfficialSkillsAssistantService;
-import com.atguigu.lease.web.app.assistant.service.memory.AssistantLongTermMemoryService;
-import com.atguigu.lease.web.app.assistant.service.session.AssistantConversationSessionService;
-import com.atguigu.lease.web.app.assistant.service.tool.AssistantApartmentTools;
+import com.atguigu.lease.web.app.assistant.service.memory.RedisAssistantLongTermMemoryService;
+import com.atguigu.lease.web.app.assistant.service.session.RedisAssistantConversationSessionService;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantAppointmentTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantBrowsingHistoryTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantKnowledgeTools;
@@ -24,13 +23,12 @@ class AssistantConfigurationTest {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withUserConfiguration(AssistantConfiguration.class, AssistantSkillsConfiguration.class)
             .withBean(AssistantPromptService.class, () -> mock(AssistantPromptService.class))
-            .withBean(AssistantConversationSessionService.class, () -> mock(AssistantConversationSessionService.class))
-            .withBean(AssistantApartmentTools.class, () -> mock(AssistantApartmentTools.class))
+            .withBean(RedisAssistantConversationSessionService.class, () -> mock(RedisAssistantConversationSessionService.class))
             .withBean(AssistantRoomTools.class, () -> mock(AssistantRoomTools.class))
             .withBean(AssistantBrowsingHistoryTools.class, () -> mock(AssistantBrowsingHistoryTools.class))
             .withBean(AssistantAppointmentTools.class, () -> mock(AssistantAppointmentTools.class))
             .withBean(AssistantKnowledgeTools.class, () -> mock(AssistantKnowledgeTools.class))
-            .withBean(AssistantLongTermMemoryService.class, () -> mock(AssistantLongTermMemoryService.class))
+            .withBean(RedisAssistantLongTermMemoryService.class, () -> mock(RedisAssistantLongTermMemoryService.class))
             .withBean(AssistantLeaseOrderTools.class, () -> mock(AssistantLeaseOrderTools.class));
 
     @Test

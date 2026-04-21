@@ -1,5 +1,6 @@
 package com.atguigu.lease.web.app.assistant.service.tool;
 
+import com.atguigu.lease.common.exception.LeaseException;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -10,6 +11,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Date;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AssistantDateTimeParserTest {
 
@@ -32,16 +34,29 @@ class AssistantDateTimeParserTest {
 
     @Test
     void shouldParseWeekdayNaturalLanguageTime() {
-        Date parsed = AssistantDateTimeParser.parseDateTime("周六下午三点", FIXED_CLOCK);
+        Date parsed = AssistantDateTimeParser.parseDateTime("周六下午3点", FIXED_CLOCK);
 
         assertThat(formatDateTime(parsed)).isEqualTo("2026-04-25 15:00:00");
     }
 
     @Test
-    void shouldParseIsoInstantWithoutLosingLocalMeaning() {
-        Date parsed = AssistantDateTimeParser.parseDateTime("2026-04-21T04:00:00Z", FIXED_CLOCK);
+    void shouldParseStandardSlashDateTimeFormat() {
+        Date parsed = AssistantDateTimeParser.parseDateTime("2026/04/21 15:30", FIXED_CLOCK);
 
-        assertThat(formatDateTime(parsed)).isEqualTo("2026-04-21 12:00:00");
+        assertThat(formatDateTime(parsed)).isEqualTo("2026-04-21 15:30:00");
+    }
+
+    @Test
+    void shouldParseTimeOnlyWithLocalTodaySemantics() {
+        Date parsed = AssistantDateTimeParser.parseDateTime("15:30", FIXED_CLOCK);
+
+        assertThat(formatDateTime(parsed)).isEqualTo("2026-04-20 15:30:00");
+    }
+
+    @Test
+    void shouldRejectIsoInstantInputOutsideSupportedRange() {
+        assertThatThrownBy(() -> AssistantDateTimeParser.parseDateTime("2026-04-21T04:00:00Z", FIXED_CLOCK))
+                .isInstanceOf(LeaseException.class);
     }
 
     @Test

@@ -14,7 +14,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 @Service
-public class RedisAssistantConversationSessionService implements AssistantConversationSessionService {
+public class RedisAssistantConversationSessionService {
 
     private static final TypeReference<List<AssistantConversationMessage>> MESSAGE_LIST_TYPE =
             new TypeReference<>() {
@@ -32,7 +32,6 @@ public class RedisAssistantConversationSessionService implements AssistantConver
         this.assistantProperties = assistantProperties;
     }
 
-    @Override
     public String resolveConversationId(Long userId, String requestedConversationId) {
         if (requestedConversationId != null && !requestedConversationId.isBlank()) {
             return requestedConversationId.trim();
@@ -40,7 +39,6 @@ public class RedisAssistantConversationSessionService implements AssistantConver
         return "assistant-" + userId + "-" + UUID.randomUUID().toString().replace("-", "");
     }
 
-    @Override
     public List<AssistantConversationMessage> getMessages(Long userId, String conversationId) {
         String cache = stringRedisTemplate.opsForValue().get(buildKey(userId, conversationId));
         if (cache == null || cache.isBlank()) {
@@ -54,7 +52,6 @@ public class RedisAssistantConversationSessionService implements AssistantConver
         }
     }
 
-    @Override
     public void appendConversation(Long userId, String conversationId, String userMessage, String assistantMessage) {
         List<AssistantConversationMessage> messages = new ArrayList<>(getMessages(userId, conversationId));
         LocalDateTime now = LocalDateTime.now();

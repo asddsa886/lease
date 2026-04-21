@@ -224,53 +224,59 @@ sequenceDiagram
 
 ---
 
-## 6. 智能助手（Spring AI 多Agent + 记忆 + 工具 + SSE）
+## 6. 智能助手（Spring AI Skills + 工具 + RAG + SSE）
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant U as 用户
     participant C as AssistantController
-    participant M as MultiAgentAssistantService
+    participant S as OfficialSkillsAssistantService
     participant CS as 会话记忆Redis
-    participant LM as 长期记忆Redis
-    participant SV as SupervisorAgent
-    participant AG as SpecialistAgent
-    participant T as AssistantTools
-    participant K as KnowledgeSearchService
+    participant LM as 长期偏好Redis
+    participant CC as ChatClient
+    participant SA as SkillPromptAugmentAdvisor
+    participant SR as SkillRegistry
+    participant T as 业务工具
+    participant K as AssistantKnowledgeTools
+    participant VS as KnowledgeSearchService
     participant V as Milvus
     participant E as SseEmitter
 
     U->>C: /app/assistant/chat/stream
-    C->>M: streamChat()
-    M->>CS: 取会话历史
-    M->>LM: 记住用户偏好并构建memory prompt
-    M->>SV: 路由决策(search_qa / business_execution)
-    SV-->>M: decision
-    M-->>E: start事件
-    M->>AG: stream(prompt+history+memory)
+    C->>S: streamChat()
+    S->>CS: 读取历史会话
+    S->>LM: 提取偏好并构建 memory prompt
+    S-->>E: start 事件
+    S->>CC: prompt(messages + memory + toolContext)
+    CC->>SA: 注入 Skills 规则
+    SA->>SR: 读取对应 SKILL.md
 
-    opt 触发工具调用
-        AG->>T: 调工具查业务数据
-        opt 触发知识检索
-            T->>K: search(question)
-            K->>V: 向量检索TopK
-            V-->>K: 片段结果
-        end
-        T-->>E: tool_call/tool_result事件
+    opt 触发业务工具
+        CC->>T: 调用房源/预约/订单工具
+        T-->>E: tool_call/tool_result 事件
+    end
+
+    opt 触发知识检索
+        CC->>K: searchKnowledge(question)
+        K->>VS: 向量检索请求
+        VS->>V: TopK 查询
+        V-->>VS: 知识片段
+        VS-->>K: 检索结果
+        K-->>E: tool_call/tool_result 事件
     end
 
     loop 流式生成
-        AG-->>M: chunk
-        M-->>E: delta事件
+        CC-->>S: chunk
+        S-->>E: delta 事件
     end
 
-    M->>CS: 落会话记忆
-    M-->>E: complete事件(reply,nextActions)
+    S->>CS: 回写会话
+    S-->>E: complete 事件(reply,nextActions)
 ```
 
 **讲解口径**
-助手采用 Supervisor + Specialist 的轻量多 Agent：先路由再执行。执行阶段可按需调用工具和知识检索，前端通过 SSE 看到实时增量输出。会话结束后回写短期记忆，长期偏好从历史对话中持续沉淀。
+当前助手不再依赖手写多 Agent 路由，而是用 `ChatClient + SkillPromptAugmentAdvisor + Skills` 选择场景规则。实时业务问题走工具，规则说明类问题走知识检索，前端通过 SSE 接收 `start / delta / tool_call / tool_result / complete` 事件。这样既保留了业务可解释性，也把代码量控制在比较轻的范围内。
 
 ---
 
@@ -279,4 +285,3 @@ sequenceDiagram
 1. 先选 2 个你最强的模块重点讲，比如“缓存治理 + 可靠消息”。  
 2. 其余模块用“目标-方案-结果”三句话过。  
 3. 图只讲主干路径，异常分支挑一个最关键的说（如索引失败可重试、MQ失败有Outbox补偿）。
-

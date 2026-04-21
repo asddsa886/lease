@@ -5,11 +5,9 @@ import com.atguigu.lease.common.result.ResultCodeEnum;
 
 import java.time.Clock;
 import java.time.DayOfWeek;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -29,14 +27,12 @@ final class AssistantDateTimeParser {
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"),
             DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"),
-            DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm"),
-            DateTimeFormatter.ISO_LOCAL_DATE_TIME
+            DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm")
     );
 
     private static final List<DateTimeFormatter> DATE_FORMATTERS = List.of(
             DateTimeFormatter.ofPattern("yyyy-MM-dd"),
-            DateTimeFormatter.ofPattern("yyyy/MM/dd"),
-            DateTimeFormatter.ISO_LOCAL_DATE
+            DateTimeFormatter.ofPattern("yyyy/MM/dd")
     );
 
     private static final Pattern ABSOLUTE_DATE_PATTERN = Pattern.compile(
@@ -49,7 +45,7 @@ final class AssistantDateTimeParser {
             "(凌晨|早上|上午|中午|下午|晚上)?\\s*(\\d{1,2}):(\\d{1,2})(?::(\\d{1,2}))?"
     );
     private static final Pattern CLOCK_TIME_PATTERN = Pattern.compile(
-            "(凌晨|早上|上午|中午|下午|晚上)?\\s*([零〇一二两三四五六七八九十\\d]{1,3})点(?:\\s*(半|一刻|三刻|[零〇一二两三四五六七八九十\\d]{1,3}分?))?"
+            "(凌晨|早上|上午|中午|下午|晚上)?\\s*(\\d{1,2})点(?:\\s*(半|一刻|三刻|\\d{1,2}分?))?"
     );
 
     private AssistantDateTimeParser() {
@@ -64,10 +60,8 @@ final class AssistantDateTimeParser {
         if (normalized.isBlank()) {
             throw new LeaseException(ResultCodeEnum.PARAM_ERROR);
         }
-
-        Date instantDate = tryParseInstant(normalized);
-        if (instantDate != null) {
-            return instantDate;
+        if (containsUnsupportedIsoMarker(normalized)) {
+            throw invalidDateTime();
         }
 
         LocalDateTime explicitDateTime = tryParseExplicitDateTime(normalized);
@@ -108,18 +102,6 @@ final class AssistantDateTimeParser {
         }
 
         throw invalidDate();
-    }
-
-    private static Date tryParseInstant(String value) {
-        try {
-            return Date.from(Instant.parse(value));
-        } catch (DateTimeParseException ignored) {
-        }
-        try {
-            return Date.from(OffsetDateTime.parse(value).toInstant());
-        } catch (DateTimeParseException ignored) {
-        }
-        return null;
     }
 
     private static LocalDateTime tryParseExplicitDateTime(String value) {
@@ -200,7 +182,7 @@ final class AssistantDateTimeParser {
         if (clockTimeMatcher.find()) {
             return buildTime(
                     clockTimeMatcher.group(1),
-                    parseNumber(clockTimeMatcher.group(2)),
+                    Integer.parseInt(clockTimeMatcher.group(2)),
                     parseMinute(clockTimeMatcher.group(3)),
                     0
             );
@@ -246,47 +228,7 @@ final class AssistantDateTimeParser {
             case "半" -> 30;
             case "一刻" -> 15;
             case "三刻" -> 45;
-            default -> parseNumber(value.replace("分", ""));
-        };
-    }
-
-    private static int parseNumber(String value) {
-        if (value == null || value.isBlank()) {
-            throw new LeaseException(ResultCodeEnum.PARAM_ERROR);
-        }
-
-        String normalized = value.replace("两", "二").replace("〇", "零");
-        if (normalized.chars().allMatch(Character::isDigit)) {
-            return Integer.parseInt(normalized);
-        }
-        if ("十".equals(normalized)) {
-            return 10;
-        }
-        if (normalized.contains("十")) {
-            int index = normalized.indexOf('十');
-            int tens = index == 0 ? 1 : parseDigit(normalized.charAt(0));
-            int ones = index == normalized.length() - 1 ? 0 : parseDigit(normalized.charAt(index + 1));
-            return tens * 10 + ones;
-        }
-        if (normalized.length() == 1) {
-            return parseDigit(normalized.charAt(0));
-        }
-        throw new LeaseException(ResultCodeEnum.PARAM_ERROR);
-    }
-
-    private static int parseDigit(char value) {
-        return switch (value) {
-            case '零', '〇' -> 0;
-            case '一' -> 1;
-            case '二' -> 2;
-            case '三' -> 3;
-            case '四' -> 4;
-            case '五' -> 5;
-            case '六' -> 6;
-            case '七' -> 7;
-            case '八' -> 8;
-            case '九' -> 9;
-            default -> throw new LeaseException(ResultCodeEnum.PARAM_ERROR);
+            default -> Integer.parseInt(value.replace("分", ""));
         };
     }
 
@@ -301,6 +243,12 @@ final class AssistantDateTimeParser {
             case "日", "天" -> DayOfWeek.SUNDAY;
             default -> throw new LeaseException(ResultCodeEnum.PARAM_ERROR);
         };
+    }
+
+    private static boolean containsUnsupportedIsoMarker(String value) {
+        return value.contains("T")
+                || value.endsWith("Z")
+                || value.matches(".*[+-]\\d{2}:\\d{2}$");
     }
 
     private static Date toDate(LocalDateTime dateTime, Clock clock) {

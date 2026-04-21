@@ -15,7 +15,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
-public class RedisAssistantLongTermMemoryService implements AssistantLongTermMemoryService {
+public class RedisAssistantLongTermMemoryService {
 
     private static final String KEY_PREFIX = "assistant:memory:profile:";
     private static final long PROFILE_TTL_DAYS = 90L;
@@ -47,7 +47,6 @@ public class RedisAssistantLongTermMemoryService implements AssistantLongTermMem
         this.objectMapper = objectMapper;
     }
 
-    @Override
     public void rememberUserMessage(Long userId, String userMessage) {
         if (userId == null || !StringUtils.hasText(userMessage)) {
             return;
@@ -61,7 +60,6 @@ public class RedisAssistantLongTermMemoryService implements AssistantLongTermMem
         save(userId, profile);
     }
 
-    @Override
     public String buildMemoryPrompt(Long userId) {
         if (userId == null) {
             return "";

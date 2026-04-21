@@ -89,6 +89,7 @@ public class AssistantPromptService {
                 - 创建、取消、改期这类动作执行成功后，必须明确复述最终结果。
                 - 预约时间和起租日期都按中国时区本地语义理解。
                 - 如果用户说“明天下午2点”或“周六下午3点”，必须保持这个本地时间语义，不能转换成 UTC。
+                - 调用预约和签约工具时，优先把时间整理成 yyyy-MM-dd HH:mm:ss，把日期整理成 yyyy-MM-dd，再传给工具。
                 """.formatted(
                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
                 currentUser.getId(),

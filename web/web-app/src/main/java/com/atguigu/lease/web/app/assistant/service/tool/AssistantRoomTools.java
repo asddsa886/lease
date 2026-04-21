@@ -4,6 +4,7 @@ import com.atguigu.lease.model.entity.CityInfo;
 import com.atguigu.lease.model.entity.DistrictInfo;
 import com.atguigu.lease.model.entity.PaymentType;
 import com.atguigu.lease.model.entity.ProvinceInfo;
+import com.atguigu.lease.web.app.service.ApartmentInfoService;
 import com.atguigu.lease.web.app.service.CityInfoService;
 import com.atguigu.lease.web.app.service.DistrictInfoService;
 import com.atguigu.lease.web.app.service.PaymentTypeService;
@@ -28,22 +29,32 @@ import java.util.Set;
 @Component
 public class AssistantRoomTools extends AbstractAssistantTools {
 
+    private final ApartmentInfoService apartmentInfoService;
     private final RoomInfoService roomInfoService;
     private final ProvinceInfoService provinceInfoService;
     private final CityInfoService cityInfoService;
     private final DistrictInfoService districtInfoService;
     private final PaymentTypeService paymentTypeService;
 
-    public AssistantRoomTools(RoomInfoService roomInfoService,
+    public AssistantRoomTools(ApartmentInfoService apartmentInfoService,
+                              RoomInfoService roomInfoService,
                               ProvinceInfoService provinceInfoService,
                               CityInfoService cityInfoService,
                               DistrictInfoService districtInfoService,
                               PaymentTypeService paymentTypeService) {
+        this.apartmentInfoService = apartmentInfoService;
         this.roomInfoService = roomInfoService;
         this.provinceInfoService = provinceInfoService;
         this.cityInfoService = cityInfoService;
         this.districtInfoService = districtInfoService;
         this.paymentTypeService = paymentTypeService;
+    }
+
+    @Tool(description = "根据公寓ID查询公寓详情")
+    public AssistantToolResult getApartmentDetail(@ToolParam(description = "公寓ID", required = true) Long apartmentId,
+                                                  ToolContext toolContext) {
+        return executeTool("getApartmentDetail", toolContext, "公寓详情查询成功",
+                () -> apartmentInfoService.getDetailById(apartmentId));
     }
 
     @Tool(description = "根据房间ID查询房间详情")

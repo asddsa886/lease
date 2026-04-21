@@ -7,10 +7,9 @@ import com.atguigu.lease.web.app.assistant.dto.AssistantChatRequest;
 import com.atguigu.lease.web.app.assistant.dto.AssistantChatResponse;
 import com.atguigu.lease.web.app.assistant.dto.AssistantStreamPayload;
 import com.atguigu.lease.web.app.assistant.dto.AssistantTaskState;
-import com.atguigu.lease.web.app.assistant.service.memory.AssistantLongTermMemoryService;
+import com.atguigu.lease.web.app.assistant.service.memory.RedisAssistantLongTermMemoryService;
 import com.atguigu.lease.web.app.assistant.service.session.AssistantConversationMessage;
-import com.atguigu.lease.web.app.assistant.service.session.AssistantConversationSessionService;
-import com.atguigu.lease.web.app.assistant.service.tool.AssistantApartmentTools;
+import com.atguigu.lease.web.app.assistant.service.session.RedisAssistantConversationSessionService;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantAppointmentTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantBrowsingHistoryTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantKnowledgeTools;
@@ -41,27 +40,25 @@ public class OfficialSkillsAssistantService implements AppAssistantService {
 
     private final ChatClient chatClient;
     private final AssistantPromptService promptService;
-    private final AssistantConversationSessionService conversationSessionService;
-    private final AssistantLongTermMemoryService longTermMemoryService;
+    private final RedisAssistantConversationSessionService conversationSessionService;
+    private final RedisAssistantLongTermMemoryService longTermMemoryService;
     private final AssistantProperties assistantProperties;
 
     public OfficialSkillsAssistantService(ChatModel chatModel,
                                           AssistantPromptService promptService,
-                                          AssistantConversationSessionService conversationSessionService,
+                                          RedisAssistantConversationSessionService conversationSessionService,
                                           AssistantProperties assistantProperties,
-                                          AssistantApartmentTools apartmentTools,
                                           AssistantRoomTools roomTools,
                                           AssistantBrowsingHistoryTools browsingHistoryTools,
                                           AssistantAppointmentTools appointmentTools,
                                           AssistantLeaseOrderTools leaseOrderTools,
                                           AssistantKnowledgeTools knowledgeTools,
-                                          AssistantLongTermMemoryService longTermMemoryService,
+                                          RedisAssistantLongTermMemoryService longTermMemoryService,
                                           SkillPromptAugmentAdvisor skillPromptAugmentAdvisor,
                                           ToolCallback readSkillToolCallback) {
         this.chatClient = ChatClient.builder(chatModel)
                 .defaultAdvisors(skillPromptAugmentAdvisor)
                 .defaultTools(
-                        apartmentTools,
                         roomTools,
                         browsingHistoryTools,
                         appointmentTools,

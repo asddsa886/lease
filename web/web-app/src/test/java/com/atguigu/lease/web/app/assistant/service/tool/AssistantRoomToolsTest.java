@@ -2,11 +2,13 @@ package com.atguigu.lease.web.app.assistant.service.tool;
 
 import com.atguigu.lease.model.entity.PaymentType;
 import com.atguigu.lease.model.entity.ProvinceInfo;
+import com.atguigu.lease.web.app.service.ApartmentInfoService;
 import com.atguigu.lease.web.app.service.CityInfoService;
 import com.atguigu.lease.web.app.service.DistrictInfoService;
 import com.atguigu.lease.web.app.service.PaymentTypeService;
 import com.atguigu.lease.web.app.service.ProvinceInfoService;
 import com.atguigu.lease.web.app.service.RoomInfoService;
+import com.atguigu.lease.web.app.vo.apartment.ApartmentDetailVo;
 import com.atguigu.lease.web.app.vo.room.RoomItemVo;
 import com.atguigu.lease.web.app.vo.room.RoomQueryVo;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
@@ -27,6 +29,7 @@ import static org.mockito.Mockito.when;
 
 class AssistantRoomToolsTest {
 
+    private final ApartmentInfoService apartmentInfoService = mock(ApartmentInfoService.class);
     private final RoomInfoService roomInfoService = mock(RoomInfoService.class);
     private final ProvinceInfoService provinceInfoService = mock(ProvinceInfoService.class);
     private final CityInfoService cityInfoService = mock(CityInfoService.class);
@@ -34,12 +37,27 @@ class AssistantRoomToolsTest {
     private final PaymentTypeService paymentTypeService = mock(PaymentTypeService.class);
 
     private final AssistantRoomTools assistantRoomTools = new AssistantRoomTools(
+            apartmentInfoService,
             roomInfoService,
             provinceInfoService,
             cityInfoService,
             districtInfoService,
             paymentTypeService
     );
+
+    @Test
+    void shouldGetApartmentDetailThroughRoomTools() {
+        ApartmentDetailVo detailVo = new ApartmentDetailVo();
+        detailVo.setId(9L);
+        detailVo.setName("测试公寓");
+        when(apartmentInfoService.getDetailById(9L)).thenReturn(detailVo);
+
+        AssistantToolResult result = assistantRoomTools.getApartmentDetail(9L, new ToolContext(Map.of()));
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getData()).isSameAs(detailVo);
+        verify(apartmentInfoService).getDetailById(9L);
+    }
 
     @Test
     void shouldSearchRoomsWithOptionalPaymentTypeAndDefaultAscendingOrder() {
