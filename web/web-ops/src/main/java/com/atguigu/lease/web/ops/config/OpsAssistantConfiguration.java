@@ -4,34 +4,32 @@ import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.agent.flow.agent.SupervisorAgent;
 import com.alibaba.cloud.ai.graph.agent.hook.skills.SkillsAgentHook;
 import com.alibaba.cloud.ai.graph.skills.registry.SkillRegistry;
-import com.atguigu.lease.web.ops.service.assistant.DisabledOpsAssistantService;
 import com.atguigu.lease.web.ops.service.assistant.MultiAgentOpsAssistantService;
+import com.atguigu.lease.web.ops.service.assistant.OpsAssistantConstants;
 import com.atguigu.lease.web.ops.service.assistant.OpsAssistantService;
 import com.atguigu.lease.web.ops.service.log.OpsLogScanService;
 import com.atguigu.lease.web.ops.service.session.OpsAssistantSessionService;
 import com.atguigu.lease.web.ops.service.tool.OpsLogAnalysisTools;
-import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.ai.chat.model.ChatModel;
 
 import java.util.List;
 
 @Configuration
+@ConditionalOnProperty(prefix = "lease.ops.assistant", name = "enabled", havingValue = "true", matchIfMissing = true)
 @EnableConfigurationProperties({OpsAssistantProperties.class, OpsLogScanProperties.class, OpsHistoryProperties.class})
 public class OpsAssistantConfiguration {
 
     @Bean("opsAppAgent")
-    @ConditionalOnBean(ChatModel.class)
     public ReactAgent opsAppAgent(ChatModel chatModel,
                                   OpsLogAnalysisTools tools,
                                   @Qualifier("opsAppSkillRegistry") SkillRegistry skillRegistry) {
         return buildSpecialistAgent(
-                "ops-app-agent",
+                OpsAssistantConstants.APP_AGENT_NAME,
                 "负责启动失败、异常栈、Bean 注入失败、业务异常、OOM、线程池问题。",
                 chatModel,
                 tools,
@@ -45,12 +43,11 @@ public class OpsAssistantConfiguration {
     }
 
     @Bean("opsInfraAgent")
-    @ConditionalOnBean(ChatModel.class)
     public ReactAgent opsInfraAgent(ChatModel chatModel,
                                     OpsLogAnalysisTools tools,
                                     @Qualifier("opsInfraSkillRegistry") SkillRegistry skillRegistry) {
         return buildSpecialistAgent(
-                "ops-infra-agent",
+                OpsAssistantConstants.INFRA_AGENT_NAME,
                 "负责 Redis、RabbitMQ、MySQL、MinIO、Milvus、网络连通性和配置缺失问题。",
                 chatModel,
                 tools,
@@ -58,18 +55,17 @@ public class OpsAssistantConfiguration {
                 """
                         你是依赖与基础设施分析 Agent。
                         你的职责是分析 Redis、RabbitMQ、MySQL、MinIO、Milvus、网络连通性和配置异常。
-                        回答时要明确指出是哪一个依赖出了问题，以及它更像连接失败、认证失败还是超时。
+                        回答时要明确指出是哪个依赖出了问题，以及它更像连接失败、认证失败还是超时。
                         """
         );
     }
 
     @Bean("opsPerformanceAgent")
-    @ConditionalOnBean(ChatModel.class)
     public ReactAgent opsPerformanceAgent(ChatModel chatModel,
                                           OpsLogAnalysisTools tools,
                                           @Qualifier("opsPerformanceSkillRegistry") SkillRegistry skillRegistry) {
         return buildSpecialistAgent(
-                "ops-performance-agent",
+                OpsAssistantConstants.PERFORMANCE_AGENT_NAME,
                 "负责慢 SQL、高耗时请求、数据库超时、连接池耗尽和锁等待问题。",
                 chatModel,
                 tools,
@@ -83,30 +79,39 @@ public class OpsAssistantConfiguration {
     }
 
     @Bean("opsSupervisorAgent")
-    @ConditionalOnBean(ChatModel.class)
     public SupervisorAgent opsSupervisorAgent(ChatModel chatModel,
-                                              OpsLogAnalysisTools tools,
-                                              @Qualifier("opsSupervisorSkillRegistry") SkillRegistry supervisorSkillRegistry,
+                                              @Qualifier("opsSupervisorSkillRegistry") SkillRegistry skillRegistry,
                                               @Qualifier("opsAppAgent") ReactAgent opsAppAgent,
                                               @Qualifier("opsInfraAgent") ReactAgent opsInfraAgent,
                                               @Qualifier("opsPerformanceAgent") ReactAgent opsPerformanceAgent) {
         ReactAgent mainAgent = ReactAgent.builder()
-                .name("ops-supervisor-main")
-                .description("负责判断问题属于哪个 specialist，并整合最终回答。")
+                .name(OpsAssistantConstants.ROUTER_AGENT_NAME)
+                .description("只负责选择下一步 specialist 的路由 Agent，不直接回答用户。")
                 .model(chatModel)
-                .methodTools(tools)
-                .hooks(SkillsAgentHook.builder().skillRegistry(supervisorSkillRegistry).build())
+                .hooks(SkillsAgentHook.builder().skillRegistry(skillRegistry).build())
                 .systemPrompt("""
-                        你是运维日志分析主管 Agent。
-                        你要根据用户问题判断应该查看当前扫描、历史故障，还是两者都看。
-                        如果当前没有扫描结果，优先调用 runLogScan 完成最近窗口扫描。
-                        如果用户问的是“昨天那次”“最近几次”，优先使用历史工具。
-                        最终输出必须包含：最可能根因、关键证据、排查建议、操作建议。
+                        你是运维日志分析路由 Agent。
+                        你不直接回答用户，也不输出分析结论，只负责决定下一步交给哪个 specialist。
+
+                        可选 specialist 只有 3 个：
+                        - ops-app-agent：处理启动失败、异常栈、Bean 注入失败、空指针、OOM、线程池拒绝等应用异常
+                        - ops-infra-agent：处理 Redis、RabbitMQ、MySQL、MinIO、Milvus、网络、认证、配置缺失等依赖问题
+                        - ops-performance-agent：处理慢 SQL、高耗时请求、数据库超时、连接池耗尽、锁等待等性能问题
+
+                        决策规则：
+                        - 每一轮最多只能选择 1 个 specialist。
+                        - 如果某个 specialist 已经给出了足够完整的最终答复，返回 FINISH。
+                        - 如果还需要继续分析，就返回最匹配的 specialist 名称。
+                        - 不要调用工具，不要输出解释，不要输出自然语言答案。
+
+                        输出格式要求：
+                        - 只能输出 JSON 数组字符串。
+                        - 合法示例：["ops-app-agent"]、["ops-infra-agent"]、["ops-performance-agent"]、["FINISH"]
+                        - 禁止输出 Markdown、代码块、额外标点、解释说明或任何自然语言。
                         """)
                 .instruction("""
-                        除非信息已经足够，否则不要跳过工具查询。
-                        优先回答对可用性影响最大的根因。
-                        当问题已经落在某个 specialist 领域时，交给最匹配的 specialist 继续分析。
+                        严格按 JSON 数组输出。
+                        除了 ["ops-app-agent"]、["ops-infra-agent"]、["ops-performance-agent"]、["FINISH"] 之外，不要输出任何其他内容。
                         """)
                 .build();
 
@@ -122,16 +127,11 @@ public class OpsAssistantConfiguration {
     }
 
     @Bean
-    @ConditionalOnMissingBean(OpsAssistantService.class)
-    public OpsAssistantService opsAssistantService(ObjectProvider<SupervisorAgent> supervisorAgentProvider,
+    public OpsAssistantService opsAssistantService(SupervisorAgent supervisorAgent,
                                                    OpsAssistantProperties assistantProperties,
                                                    OpsLogScanService logScanService,
                                                    OpsAssistantSessionService sessionService) {
-        SupervisorAgent supervisorAgent = supervisorAgentProvider.getIfAvailable();
-        if (assistantProperties.isEnabled() && supervisorAgent != null) {
-            return new MultiAgentOpsAssistantService(supervisorAgent, assistantProperties, logScanService, sessionService);
-        }
-        return new DisabledOpsAssistantService();
+        return new MultiAgentOpsAssistantService(supervisorAgent, assistantProperties, logScanService, sessionService);
     }
 
     private ReactAgent buildSpecialistAgent(String name,
@@ -145,6 +145,7 @@ public class OpsAssistantConfiguration {
                 .description(description)
                 .model(chatModel)
                 .methodTools(tools)
+                .outputKey(OpsAssistantConstants.SPECIALIST_REPLY_KEY)
                 .hooks(SkillsAgentHook.builder().skillRegistry(skillRegistry).build())
                 .systemPrompt(systemPrompt)
                 .instruction("严格依据技能规则、工具结果和日志证据回答问题。")

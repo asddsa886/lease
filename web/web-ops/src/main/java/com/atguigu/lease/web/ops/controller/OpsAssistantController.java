@@ -7,6 +7,7 @@ import com.atguigu.lease.web.ops.service.assistant.OpsAssistantService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,6 +18,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @Tag(name = "运维聊天助手")
 @RestController
 @RequestMapping("/ops/assistant")
+@ConditionalOnProperty(prefix = "lease.ops.assistant", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class OpsAssistantController {
 
     private final OpsAssistantService assistantService;

@@ -43,3 +43,6 @@ tmp
 .idea
 
 logs/
+/data/
+/runtime-logs/
+/web/web-ops/data/

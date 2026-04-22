@@ -1,5 +1,6 @@
 package com.atguigu.lease.web.ops.service.assistant;
 
+import com.alibaba.cloud.ai.graph.OverAllState;
 import com.alibaba.cloud.ai.graph.agent.flow.agent.SupervisorAgent;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
 import com.atguigu.lease.web.ops.config.OpsAssistantProperties;
@@ -8,6 +9,7 @@ import com.atguigu.lease.web.ops.dto.OpsAssistantChatResponse;
 import com.atguigu.lease.web.ops.dto.OpsAssistantStreamPayload;
 import com.atguigu.lease.web.ops.dto.OpsAssistantTaskState;
 import com.atguigu.lease.web.ops.dto.OpsLogScanReport;
+import com.atguigu.lease.web.ops.exception.OpsAssistantUnavailableException;
 import com.atguigu.lease.web.ops.service.log.OpsLogScanService;
 import com.atguigu.lease.web.ops.service.session.OpsAssistantSessionService;
 import com.atguigu.lease.web.ops.service.tool.OpsToolEventContext;
@@ -15,11 +17,14 @@ import com.atguigu.lease.web.ops.service.tool.OpsToolEventEmitter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.util.json.JsonParser;
 import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -27,7 +32,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Slf4j
 public class MultiAgentOpsAssistantService implements OpsAssistantService {
 
-    private static final String TASK_TYPE = "ops-assistant";
+    private static final String ASSISTANT_UNAVAILABLE_MESSAGE = "运维助手当前不可用，请检查 Spring AI ChatModel 配置或模型服务状态。";
+    private static final String EMPTY_ANALYSIS_MESSAGE = "当前没有拿到有效分析结果，你可以继续追问，或先触发一次最近窗口扫描。";
 
     private final SupervisorAgent supervisorAgent;
     private final OpsAssistantProperties assistantProperties;
@@ -47,22 +53,16 @@ public class MultiAgentOpsAssistantService implements OpsAssistantService {
     @Override
     public OpsAssistantChatResponse chat(OpsAssistantChatRequest request) {
         String conversationId = resolveConversationId(request);
-        try {
-            String reply = execute(conversationId, request.getMessage(), OpsToolEventEmitter.noop());
-            rememberSession(conversationId, request.getMessage(), reply);
-            return OpsAssistantChatResponse.builder()
-                    .conversationId(conversationId)
-                    .reply(reply)
-                    .taskState(OpsAssistantTaskState.builder().type(TASK_TYPE).status("completed").build())
-                    .build();
-        } catch (Exception e) {
-            log.error("Ops assistant chat failed", e);
-            return OpsAssistantChatResponse.builder()
-                    .conversationId(conversationId)
-                    .reply("运维助手处理失败，请先检查模型配置，或直接调用 /ops/log-scan/latest 查看当前扫描结果。")
-                    .taskState(OpsAssistantTaskState.builder().type(TASK_TYPE).status("failed").build())
-                    .build();
-        }
+        String reply = execute(conversationId, request.getMessage(), OpsToolEventEmitter.noop());
+        rememberSession(conversationId, request.getMessage(), reply);
+        return OpsAssistantChatResponse.builder()
+                .conversationId(conversationId)
+                .reply(reply)
+                .taskState(OpsAssistantTaskState.builder()
+                        .type(OpsAssistantConstants.TASK_TYPE)
+                        .status("completed")
+                        .build())
+                .build();
     }
 
     @Override
@@ -75,7 +75,7 @@ public class MultiAgentOpsAssistantService implements OpsAssistantService {
             try {
                 sendEvent(emitter, "start", OpsAssistantStreamPayload.builder()
                         .conversationId(conversationId)
-                        .message("运维助手已开始分析日志")
+                        .message("运维助手已开始分析日志。")
                         .build(), closed);
                 String reply = execute(conversationId, request.getMessage(), (eventName, toolName, message) ->
                         sendEvent(emitter, eventName, OpsAssistantStreamPayload.builder()
@@ -93,14 +93,20 @@ public class MultiAgentOpsAssistantService implements OpsAssistantService {
                 sendEvent(emitter, "complete", OpsAssistantStreamPayload.builder()
                         .conversationId(conversationId)
                         .reply(reply)
-                        .taskState(OpsAssistantTaskState.builder().type(TASK_TYPE).status("completed").build())
+                        .taskState(OpsAssistantTaskState.builder()
+                                .type(OpsAssistantConstants.TASK_TYPE)
+                                .status("completed")
+                                .build())
                         .build(), closed);
             } catch (Exception e) {
                 log.error("Ops assistant stream failed", e);
                 sendEvent(emitter, "error", OpsAssistantStreamPayload.builder()
                         .conversationId(conversationId)
-                        .message("运维助手处理失败，请检查模型配置或当前日志目录设置。")
-                        .taskState(OpsAssistantTaskState.builder().type(TASK_TYPE).status("failed").build())
+                        .message(resolveUnavailableMessage(e))
+                        .taskState(OpsAssistantTaskState.builder()
+                                .type(OpsAssistantConstants.TASK_TYPE)
+                                .status("failed")
+                                .build())
                         .build(), closed);
             } finally {
                 safeComplete(emitter, closed);
@@ -116,18 +122,79 @@ public class MultiAgentOpsAssistantService implements OpsAssistantService {
     private String execute(String conversationId, String userMessage, OpsToolEventEmitter emitter) {
         OpsToolEventContext.bind(emitter);
         try {
-            List<Message> messages = runAgent(buildPrompt(conversationId, userMessage));
-            return extractReply(messages);
+            Optional<OverAllState> state = runAgent(buildPrompt(conversationId, userMessage));
+            return extractReply(state).orElseGet(this::buildDefaultReply);
+        } catch (Exception e) {
+            throw asUnavailableException(e);
         } finally {
             OpsToolEventContext.clear();
         }
     }
 
-    private List<Message> runAgent(String prompt) {
+    private Optional<OverAllState> runAgent(String prompt) {
         try {
-            return supervisorAgent.streamMessages(prompt).collectList().block();
+            return supervisorAgent.invoke(prompt);
         } catch (GraphRunnerException e) {
-            throw new IllegalStateException("运维助手执行失败", e);
+            throw new OpsAssistantUnavailableException(ASSISTANT_UNAVAILABLE_MESSAGE, e);
+        }
+    }
+
+    private Optional<String> extractReply(Optional<OverAllState> stateOptional) {
+        if (stateOptional == null || stateOptional.isEmpty()) {
+            return Optional.empty();
+        }
+        OverAllState state = stateOptional.get();
+        return extractReplyFromOutputKey(state)
+                .or(() -> extractReplyFromMessages(state));
+    }
+
+    private Optional<String> extractReplyFromOutputKey(OverAllState state) {
+        Object value = state.value(OpsAssistantConstants.SPECIALIST_REPLY_KEY).orElse(null);
+        if (value instanceof AssistantMessage assistantMessage && StringUtils.hasText(assistantMessage.getText())) {
+            return Optional.of(assistantMessage.getText().trim());
+        }
+        if (value instanceof String text && StringUtils.hasText(text)) {
+            return Optional.of(text.trim());
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> extractReplyFromMessages(OverAllState state) {
+        Object value = state.value("messages").orElse(null);
+        if (!(value instanceof List<?> messages) || messages.isEmpty()) {
+            return Optional.empty();
+        }
+        return messages.stream()
+                .filter(AssistantMessage.class::isInstance)
+                .map(AssistantMessage.class::cast)
+                .map(AssistantMessage::getText)
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .filter(text -> !isRoutingDirective(text))
+                .reduce((first, second) -> second);
+    }
+
+    private boolean isRoutingDirective(String text) {
+        if (!StringUtils.hasText(text)) {
+            return false;
+        }
+        String trimmed = text.trim();
+        if (OpsAssistantConstants.isRoutingToken(trimmed)) {
+            return true;
+        }
+        if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
+            return false;
+        }
+        try {
+            Object parsed = JsonParser.fromJson(trimmed, List.class);
+            if (!(parsed instanceof List<?> items) || items.isEmpty()) {
+                return false;
+            }
+            return items.stream()
+                    .map(item -> item == null ? null : String.valueOf(item).trim())
+                    .allMatch(OpsAssistantConstants::isRoutingToken);
+        } catch (Exception e) {
+            return false;
         }
     }
 
@@ -139,11 +206,13 @@ public class MultiAgentOpsAssistantService implements OpsAssistantService {
         if (StringUtils.hasText(contextPrompt)) {
             builder.append(contextPrompt).append(System.lineSeparator());
         }
-        builder.append("当前扫描概况：").append(System.lineSeparator())
-                .append("- 当前状态：").append(latestReport.getStatus()).append(System.lineSeparator())
-                .append("- 当前扫描ID：").append(latestReport.getScanTaskId()).append(System.lineSeparator())
-                .append("- 当前摘要：").append(latestReport.getSummary()).append(System.lineSeparator())
-                .append("用户问题：").append(userMessage);
+        if (latestReport != null) {
+            builder.append("当前扫描概况：").append(System.lineSeparator())
+                    .append("- 当前状态：").append(latestReport.getStatus()).append(System.lineSeparator())
+                    .append("- 当前扫描ID：").append(latestReport.getScanTaskId()).append(System.lineSeparator())
+                    .append("- 当前摘要：").append(latestReport.getSummary()).append(System.lineSeparator());
+        }
+        builder.append("用户问题：").append(userMessage);
         return builder.toString();
     }
 
@@ -153,7 +222,7 @@ public class MultiAgentOpsAssistantService implements OpsAssistantService {
                 conversationId,
                 userMessage,
                 assistantReply,
-                latestReport.getScanTaskId(),
+                latestReport == null ? null : latestReport.getScanTaskId(),
                 detectCategory(userMessage, assistantReply)
         );
     }
@@ -185,27 +254,31 @@ public class MultiAgentOpsAssistantService implements OpsAssistantService {
         return null;
     }
 
-    private String extractReply(List<Message> messages) {
-        if (messages == null || messages.isEmpty()) {
-            return "当前没有拿到有效分析结果，你可以继续追问，或者先触发一次最近窗口扫描。";
+    private String buildDefaultReply() {
+        OpsLogScanReport latestReport = logScanService.getLatestReport();
+        if (latestReport == null) {
+            return EMPTY_ANALYSIS_MESSAGE;
         }
-        return messages.stream()
-                .filter(AssistantMessage.class::isInstance)
-                .map(AssistantMessage.class::cast)
-                .map(AssistantMessage::getText)
-                .filter(text -> text != null && !text.isBlank())
-                .reduce((first, second) -> second)
-                .orElse("当前没有拿到有效分析结果，你可以继续追问，或者先触发一次最近窗口扫描。");
+        return """
+                当前还没有拿到专项分析结论。
+                你可以直接让我：
+                - 分析当前扫描
+                - 查最近 3 次故障
+                - 看看是不是 Redis / MySQL / RabbitMQ 问题
+                - 看看有没有慢 SQL 或高耗时请求
+
+                当前最新扫描摘要：%s
+                """.formatted(latestReport.getSummary());
     }
 
     private List<String> splitReply(String reply, int chunkSize) {
-        if (reply == null || reply.isBlank()) {
-            return List.of("当前没有拿到有效分析结果。");
+        if (!StringUtils.hasText(reply)) {
+            return List.of(EMPTY_ANALYSIS_MESSAGE);
         }
         if (reply.length() <= chunkSize) {
             return List.of(reply);
         }
-        java.util.ArrayList<String> chunks = new java.util.ArrayList<>();
+        List<String> chunks = new ArrayList<>();
         for (int start = 0; start < reply.length(); start += chunkSize) {
             chunks.add(reply.substring(start, Math.min(reply.length(), start + chunkSize)));
         }
@@ -236,5 +309,21 @@ public class MultiAgentOpsAssistantService implements OpsAssistantService {
             return request.getConversationId().trim();
         }
         return UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private OpsAssistantUnavailableException asUnavailableException(Exception exception) {
+        if (exception instanceof OpsAssistantUnavailableException unavailableException) {
+            return unavailableException;
+        }
+        log.error("Ops assistant chat failed", exception);
+        return new OpsAssistantUnavailableException(ASSISTANT_UNAVAILABLE_MESSAGE, exception);
+    }
+
+    private String resolveUnavailableMessage(Exception exception) {
+        if (exception instanceof OpsAssistantUnavailableException unavailableException
+                && StringUtils.hasText(unavailableException.getMessage())) {
+            return unavailableException.getMessage();
+        }
+        return ASSISTANT_UNAVAILABLE_MESSAGE;
     }
 }
