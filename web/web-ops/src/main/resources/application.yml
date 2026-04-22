@@ -1,0 +1,37 @@
+server:
+  port: 8083
+
+spring:
+  ai:
+    model:
+      chat: ${SPRING_AI_CHAT_MODEL:openai}
+    openai:
+      api-key: ${SPRING_AI_OPENAI_API_KEY:}
+      base-url: ${SPRING_AI_OPENAI_BASE_URL:http://localhost:18080}
+      chat:
+        options:
+          model: ${SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL:gpt-5.4}
+          temperature: ${SPRING_AI_OPENAI_CHAT_OPTIONS_TEMPERATURE:0.1}
+  jackson:
+    time-zone: GMT+8
+
+springdoc:
+  default-flat-param-object: true
+
+lease:
+  ops:
+    assistant:
+      enabled: ${LEASE_OPS_ASSISTANT_ENABLED:true}
+      stream-timeout: ${LEASE_OPS_ASSISTANT_STREAM_TIMEOUT:2m}
+      session-ttl: ${LEASE_OPS_ASSISTANT_SESSION_TTL:1h}
+    scan:
+      startup-enabled: ${LEASE_OPS_SCAN_STARTUP_ENABLED:true}
+      directories: ${LEASE_OPS_SCAN_DIRECTORIES:./logs}
+      file-patterns: ${LEASE_OPS_SCAN_FILE_PATTERNS:*.log,*.txt,*.gz}
+      lookback-hours: ${LEASE_OPS_SCAN_LOOKBACK_HOURS:72}
+      max-files: ${LEASE_OPS_SCAN_MAX_FILES:20}
+      max-bytes-per-file: ${LEASE_OPS_SCAN_MAX_BYTES_PER_FILE:262144}
+      slow-sql-threshold-ms: ${LEASE_OPS_SCAN_SLOW_SQL_THRESHOLD_MS:2000}
+    history:
+      dir: ${LEASE_OPS_HISTORY_DIR:./data/ops-history}
+      max-scans: ${LEASE_OPS_HISTORY_MAX_SCANS:50}
