@@ -91,6 +91,9 @@ lease:
     local-null-ttl-sec: ${LEASE_CACHE_LOCAL_NULL_TTL_SEC:10}
   mq:
     order-timeout-ttl-ms: ${LEASE_MQ_ORDER_TIMEOUT_TTL_MS:900000}
+  outbox:
+    retry-owner: ${LEASE_OUTBOX_RETRY_OWNER:admin}
+    retry-delay-ms: ${LEASE_OUTBOX_RETRY_DELAY_MS:5000}
   async:
     browsing-history:
       core-pool-size: ${LEASE_ASYNC_BROWSING_HISTORY_CORE:2}

@@ -80,6 +80,9 @@ lease:
       nlist: ${LEASE_ASSISTANT_RAG_NLIST:128}
   mq:
     order-timeout-ttl-ms: ${LEASE_MQ_ORDER_TIMEOUT_TTL_MS:900000}
+  outbox:
+    retry-owner: ${LEASE_OUTBOX_RETRY_OWNER:admin}
+    retry-delay-ms: ${LEASE_OUTBOX_RETRY_DELAY_MS:5000}
 
 
 # 用于打印框架生成的 sql 语句，便于调试（建议仅在开发环境开启）

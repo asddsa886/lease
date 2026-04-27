@@ -8,7 +8,6 @@ import com.atguigu.lease.common.utils.TransactionUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -22,14 +21,11 @@ import java.time.Instant;
 @ConditionalOnProperty(name = "mq.enabled", havingValue = "true", matchIfMissing = true)
 public class LeaseAgreementEventPublisher {
 
-    private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
     private final OutboxService outboxService;
 
-    public LeaseAgreementEventPublisher(RabbitTemplate rabbitTemplate,
-                                        ObjectMapper objectMapper,
+    public LeaseAgreementEventPublisher(ObjectMapper objectMapper,
                                         OutboxService outboxService) {
-        this.rabbitTemplate = rabbitTemplate;
         this.objectMapper = objectMapper;
         this.outboxService = outboxService;
     }
@@ -49,15 +45,7 @@ public class LeaseAgreementEventPublisher {
             TransactionUtils.runAfterCommit(() -> outboxService.sendOne(saved.getId()));
         } catch (Exception e) {
             log.error("MQ outbox enqueue failed, routingKey={}, event={}", routingKey, event, e);
-            TransactionUtils.runAfterCommit(() -> {
-                try {
-                    rabbitTemplate.convertAndSend(LeaseMqConstants.LEASE_EXCHANGE, routingKey, event);
-                    log.info("MQ fallback publish routingKey={} type={} agreementId={}",
-                            routingKey, event.getType(), event.getAgreementId());
-                } catch (Exception ex) {
-                    log.error("MQ fallback publish failed, routingKey={}, event={}", routingKey, event, ex);
-                }
-            });
+            throw new IllegalStateException("Failed to enqueue lease agreement event into outbox", e);
         }
     }
 

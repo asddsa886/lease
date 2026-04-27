@@ -4,7 +4,7 @@ import com.atguigu.lease.common.mq.outbox.entity.OutboxMessage;
 import com.atguigu.lease.common.mq.outbox.mapper.OutboxMessageMapper;
 import com.atguigu.lease.common.mq.outbox.service.OutboxService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -12,11 +12,11 @@ import java.util.Date;
 import java.util.List;
 
 /**
- * Outbox 补偿任务（App 服务也可以跑；实际部署可只让一个服务/实例负责）。
+ * Outbox 补偿任务（默认不由 App 服务负责；可通过 retry-owner 切换）。
  */
 @Slf4j
 @Component
-@ConditionalOnProperty(name = "mq.enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnExpression("'${mq.enabled:true}' == 'true' and '${lease.outbox.retry-owner:admin}' == 'app'")
 public class OutboxRetryTasks {
 
     private final OutboxMessageMapper outboxMessageMapper;
@@ -33,11 +33,11 @@ public class OutboxRetryTasks {
         if (list == null || list.isEmpty()) {
             return;
         }
-        for (OutboxMessage m : list) {
+        for (OutboxMessage message : list) {
             try {
-                outboxService.sendOne(m.getId());
+                outboxService.sendOne(message.getId());
             } catch (Exception e) {
-                log.warn("Outbox retry sendOne failed, id={}", m.getId(), e);
+                log.warn("Outbox retry sendOne failed, id={}", message.getId(), e);
             }
         }
     }
