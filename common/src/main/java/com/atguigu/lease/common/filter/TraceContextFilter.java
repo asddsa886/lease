@@ -1,6 +1,7 @@
 package com.atguigu.lease.common.filter;
 
 import com.atguigu.lease.common.login.LoginUserHolder;
+import com.atguigu.lease.common.utils.IpUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -78,7 +79,7 @@ public class TraceContextFilter extends OncePerRequestFilter {
             }
 
             int status = response.getStatus();
-            String ip = resolveClientIp(request);
+            String ip = IpUtil.getClientIp(request);
             String ua = Optional.ofNullable(request.getHeader("User-Agent")).orElse("-");
 
             String userId = resolveLoginUserId(request);
@@ -97,26 +98,6 @@ public class TraceContextFilter extends OncePerRequestFilter {
             return fromHeader.trim();
         }
         return UUID.randomUUID().toString().replace("-", "");
-    }
-
-    private static String resolveClientIp(HttpServletRequest request) {
-        String xff = request.getHeader("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            // 多级代理时取第一个非空 ip
-            for (String part : xff.split(",")) {
-                String ip = part.trim();
-                if (!ip.isBlank() && !"unknown".equalsIgnoreCase(ip)) {
-                    return ip;
-                }
-            }
-        }
-
-        String xRealIp = request.getHeader("X-Real-IP");
-        if (xRealIp != null && !xRealIp.isBlank() && !"unknown".equalsIgnoreCase(xRealIp)) {
-            return xRealIp.trim();
-        }
-
-        return request.getRemoteAddr();
     }
 
     private static String resolveLoginUserId(HttpServletRequest request) {

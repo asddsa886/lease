@@ -1,14 +1,13 @@
 package com.atguigu.lease.web.app.controller.login;
- 
- 
+
+
 import com.atguigu.lease.common.exception.LeaseException;
 import com.atguigu.lease.common.login.LoginUserHolder;
 import com.atguigu.lease.common.ratelimit.RedisRateLimiter;
 import com.atguigu.lease.common.ratelimit.RateLimitProperties;
 import com.atguigu.lease.common.result.Result;
 import com.atguigu.lease.common.result.ResultCodeEnum;
-import com.atguigu.lease.common.security.JwtTokenResolver;
-import com.atguigu.lease.common.security.TokenBlacklistService;
+import com.atguigu.lease.common.security.LogoutService;
 import com.atguigu.lease.common.utils.IpUtil;
 import com.atguigu.lease.web.app.service.LoginService;
 import com.atguigu.lease.web.app.service.UserInfoService;
@@ -24,16 +23,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import org.springframework.validation.annotation.Validated;
- 
+
 @Tag(name = "登录管理")
 @RestController
 @RequestMapping("/app/")
 @Validated
 public class LoginController {
- 
+
     @Autowired
     private LoginService loginService;
- 
+
     @Autowired
     private UserInfoService userInfoService;
 
@@ -44,8 +43,8 @@ public class LoginController {
     private RateLimitProperties rateLimitProperties;
 
     @Autowired
-    private TokenBlacklistService tokenBlacklistService;
- 
+    private LogoutService logoutService;
+
     @GetMapping("login/getCode")
     @Operation(summary = "获取短信验证码")
     public Result getCode(@RequestParam
@@ -53,10 +52,8 @@ public class LoginController {
                               @Pattern(regexp = "^1\\d{10}$", message = "phone格式不合法")
                               String phone,
                           HttpServletRequest request) {
-        // P0：接口稳定性（防刷）- 短信验证码按 IP + phone 双维度限流
         String ip = IpUtil.getClientIp(request);
 
-        // 规则
         RateLimitProperties.DimRule rule = rateLimitProperties.getApp().getSms();
 
         boolean ipAllowed = redisRateLimiter.tryAcquireSlidingWindow(
@@ -80,11 +77,10 @@ public class LoginController {
         loginService.getCode(phone);
         return Result.ok();
     }
- 
+
     @PostMapping("login")
     @Operation(summary = "登录")
     public Result<String> login(@RequestBody @Valid LoginVo loginVo, HttpServletRequest request) {
-        // P0：接口稳定性（防刷）- 登录按 IP + phone 双维度限流（防爆破/撞库）
         String ip = IpUtil.getClientIp(request);
 
         RateLimitProperties.DimRule rule = rateLimitProperties.getApp().getLogin();
@@ -110,7 +106,7 @@ public class LoginController {
         String token = loginService.login(loginVo);
         return Result.ok(token);
     }
- 
+
     @GetMapping("info")
     @Operation(summary = "获取登录用户信息")
     public Result<UserInfoVo> info() {
@@ -122,9 +118,8 @@ public class LoginController {
     @PostMapping("logout")
     @Operation(summary = "退出登录")
     public Result<Void> logout(HttpServletRequest request) {
-        String token = JwtTokenResolver.resolve(request);
-        tokenBlacklistService.blacklist(token);
+        logoutService.logout(request);
         return Result.ok();
     }
 }
- 
+

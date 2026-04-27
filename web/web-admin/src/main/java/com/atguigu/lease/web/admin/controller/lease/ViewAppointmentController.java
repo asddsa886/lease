@@ -2,6 +2,7 @@ package com.atguigu.lease.web.admin.controller.lease;
 
 
 import com.atguigu.lease.common.result.Result;
+import com.atguigu.lease.common.utils.PageParamUtils;
 import com.atguigu.lease.model.entity.ViewAppointment;
 import com.atguigu.lease.model.enums.AppointmentStatus;
 import com.atguigu.lease.web.admin.service.ViewAppointmentService;
@@ -13,7 +14,6 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.ParameterResolutionDelegate;
 import org.springframework.web.bind.annotation.*;
 
 
@@ -28,7 +28,7 @@ public class ViewAppointmentController {
     @Operation(summary = "分页查询预约信息")
     @GetMapping("page")
     public Result<IPage<AppointmentVo>> page(@RequestParam long current, @RequestParam long size, AppointmentQueryVo queryVo) {
-        Page<AppointmentVo> page = new Page<>(current, size);
+        Page<AppointmentVo> page = PageParamUtils.page(current, size);
         IPage<AppointmentVo> result = viewAppointmentService.pageAppointment(page,queryVo);
         return Result.ok(result);
     }

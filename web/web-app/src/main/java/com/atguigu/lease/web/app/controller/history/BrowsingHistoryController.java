@@ -2,6 +2,7 @@ package com.atguigu.lease.web.app.controller.history;
 
 import com.atguigu.lease.common.login.LoginUserHolder;
 import com.atguigu.lease.common.result.Result;
+import com.atguigu.lease.common.utils.PageParamUtils;
 import com.atguigu.lease.web.app.service.BrowsingHistoryService;
 import com.atguigu.lease.web.app.vo.history.HistoryItemVo;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -28,7 +29,7 @@ public class BrowsingHistoryController {
     @GetMapping("pageItem")
     public Result<IPage<HistoryItemVo>> page(@RequestParam @Min(value = 1, message = "current必须>=1") long current,
                                             @RequestParam @Min(value = 1, message = "size必须>=1") long size) {
-        Page<HistoryItemVo> page = new Page<>(current, size);
+        Page<HistoryItemVo> page = PageParamUtils.page(current, size);
         Long userId = LoginUserHolder.get().getId();
         IPage<HistoryItemVo> result = browsingHistoryService.pageItem(page, userId);
         return Result.ok(result);

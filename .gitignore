@@ -41,6 +41,7 @@ target
 tmp
 
 .idea
+.claude/
 
 logs/
 /data/

@@ -2,6 +2,7 @@ package com.atguigu.lease.web.admin.controller.user;
 
 
 import com.atguigu.lease.common.result.Result;
+import com.atguigu.lease.common.utils.PageParamUtils;
 import com.atguigu.lease.model.entity.UserInfo;
 import com.atguigu.lease.model.enums.BaseStatus;
 import com.atguigu.lease.web.admin.service.UserInfoService;
@@ -26,8 +27,7 @@ public class UserInfoController {
     @Operation(summary = "分页查询用户信息")
     @GetMapping("page")
     public Result<IPage<UserInfo>> pageUserInfo(@RequestParam long current, @RequestParam long size, UserInfoQueryVo queryVo) {
-        Page<UserInfo> page = new Page<>(current, size);
-        //
+        Page<UserInfo> page = PageParamUtils.page(current, size);
         LambdaQueryWrapper<UserInfo> wrapper = new LambdaQueryWrapper<>();
         wrapper.like(queryVo.getPhone()!= null,UserInfo::getPhone,queryVo.getPhone());
         wrapper.eq(UserInfo::getStatus,BaseStatus.ENABLE.getCode());

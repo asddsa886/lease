@@ -1,6 +1,7 @@
 package com.atguigu.lease.web.admin.controller.lease;
 
 import com.atguigu.lease.common.result.Result;
+import com.atguigu.lease.common.utils.PageParamUtils;
 import com.atguigu.lease.web.admin.service.LeaseOrderService;
 import com.atguigu.lease.web.admin.vo.order.LeaseOrderQueryVo;
 import com.atguigu.lease.web.admin.vo.order.LeaseOrderVo;
@@ -30,7 +31,7 @@ public class LeaseOrderController {
     public Result<IPage<LeaseOrderVo>> page(@RequestParam long current,
                                             @RequestParam long size,
                                             LeaseOrderQueryVo queryVo) {
-        IPage<LeaseOrderVo> result = leaseOrderService.pageOrder(new Page<>(current, size), queryVo);
+        IPage<LeaseOrderVo> result = leaseOrderService.pageOrder(PageParamUtils.page(current, size), queryVo);
         return Result.ok(result);
     }
 

@@ -1,5 +1,7 @@
 package com.atguigu.lease.common.utils;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+
 /**
  * 分页参数兜底与上限保护。
  * <p>
@@ -9,11 +11,8 @@ package com.atguigu.lease.common.utils;
  */
 public final class PageParamUtils {
 
-    /** 默认页码（从 1 开始） */
     public static final long DEFAULT_CURRENT = 1L;
-    /** 默认每页大小 */
     public static final long DEFAULT_SIZE = 20L;
-    /** 每页最大大小 */
     public static final long MAX_SIZE = 200L;
 
     private PageParamUtils() {
@@ -31,5 +30,9 @@ public final class PageParamUtils {
             return DEFAULT_SIZE;
         }
         return Math.min(size, MAX_SIZE);
+    }
+
+    public static <T> Page<T> page(Long current, Long size) {
+        return new Page<>(current(current), size(size));
     }
 }

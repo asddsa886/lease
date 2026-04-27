@@ -1,8 +1,9 @@
 package com.atguigu.lease.web.admin.controller.lease;
 
 
-import com.atguigu.lease.common.result.Result;
 import com.atguigu.lease.common.mq.publisher.LeaseAgreementEventPublisher;
+import com.atguigu.lease.common.result.Result;
+import com.atguigu.lease.common.utils.PageParamUtils;
 import com.atguigu.lease.model.entity.LeaseAgreement;
 import com.atguigu.lease.model.enums.LeaseStatus;
 import com.atguigu.lease.web.admin.service.LeaseAgreementService;
@@ -51,7 +52,7 @@ public class LeaseAgreementController {
     @Operation(summary = "根据条件分页查询租约列表")
     @GetMapping("page")
     public Result<IPage<AgreementVo>> page(@RequestParam long current, @RequestParam long size, AgreementQueryVo queryVo) {
-        Page<AgreementVo> page = new Page<>(current, size);
+        Page<AgreementVo> page = PageParamUtils.page(current, size);
         IPage<AgreementVo> result = leaseAgreementService.pageAgreement(page,queryVo);
         return Result.ok(result);
     }

@@ -1,6 +1,6 @@
 package com.atguigu.lease.web.app.custom.config;
 
-import com.atguigu.lease.web.app.custom.convert.StringToBaseEnumConverterFactory;
+import com.atguigu.lease.common.utils.StringToBaseEnumConverterFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.format.FormatterRegistry;

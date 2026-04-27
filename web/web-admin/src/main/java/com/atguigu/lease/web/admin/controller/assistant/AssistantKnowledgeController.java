@@ -1,6 +1,7 @@
 package com.atguigu.lease.web.admin.controller.assistant;
 
 import com.atguigu.lease.common.result.Result;
+import com.atguigu.lease.common.utils.PageParamUtils;
 import com.atguigu.lease.model.entity.AssistantKnowledgeDocument;
 import com.atguigu.lease.web.admin.service.AssistantKnowledgeService;
 import com.atguigu.lease.web.admin.vo.assistant.AssistantKnowledgeQueryVo;
@@ -33,7 +34,7 @@ public class AssistantKnowledgeController {
     public Result<IPage<AssistantKnowledgeDocument>> page(@RequestParam long current,
                                                           @RequestParam long size,
                                                           AssistantKnowledgeQueryVo queryVo) {
-        return Result.ok(assistantKnowledgeService.pageDocument(new Page<>(current, size), queryVo));
+        return Result.ok(assistantKnowledgeService.pageDocument(PageParamUtils.page(current, size), queryVo));
     }
 
     @Operation(summary = "根据 id 查询知识文档")

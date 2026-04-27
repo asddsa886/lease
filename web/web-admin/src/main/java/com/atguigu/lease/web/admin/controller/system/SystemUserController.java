@@ -2,6 +2,7 @@ package com.atguigu.lease.web.admin.controller.system;
 
 
 import com.atguigu.lease.common.result.Result;
+import com.atguigu.lease.common.utils.PageParamUtils;
 import com.atguigu.lease.model.entity.SystemUser;
 import com.atguigu.lease.model.enums.BaseStatus;
 import com.atguigu.lease.web.admin.service.SystemUserService;
@@ -31,7 +32,7 @@ public class SystemUserController {
     @Operation(summary = "根据条件分页查询后台用户列表")
     @GetMapping("page")
     public Result<IPage<SystemUserItemVo>> page(@RequestParam long current, @RequestParam long size, SystemUserQueryVo queryVo) {
-        Page<SystemUser> page = new Page<>(current, size);
+        Page<SystemUser> page = PageParamUtils.page(current, size);
         IPage<SystemUserItemVo> result = systemUserService.pageSystemUser(page,queryVo);
 
         return Result.ok(result);
@@ -53,9 +54,6 @@ public class SystemUserController {
 
         boolean isCreate = systemUser.getId() == null;
 
-        // P0-安全：密码处理策略
-        // - 新增：必须设置密码且进行 BCrypt 哈希
-        // - 更新：只有在传了非空密码时才更新密码；否则不覆盖（避免把密码置空/重复哈希）
         String rawPassword = systemUser.getPassword();
         if (isCreate) {
             if (rawPassword == null || rawPassword.isBlank()) {
@@ -66,7 +64,7 @@ public class SystemUserController {
             if (rawPassword != null && !rawPassword.isBlank()) {
                 systemUser.setPassword(passwordEncoder.encode(rawPassword));
             } else {
-                systemUser.setPassword(null); // 交给 MyBatis-Plus 动态更新策略（不更新该字段）
+                systemUser.setPassword(null);
             }
         }
 

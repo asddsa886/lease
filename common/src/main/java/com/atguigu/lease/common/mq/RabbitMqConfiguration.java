@@ -15,6 +15,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -25,6 +27,8 @@ import java.util.Map;
 @Configuration
 @ConditionalOnProperty(name = "mq.enabled", havingValue = "true", matchIfMissing = true)
 public class RabbitMqConfiguration {
+
+    private static final Logger log = LoggerFactory.getLogger(RabbitMqConfiguration.class);
 
     @Value("${lease.mq.timeout-ttl-ms:60000}")
     private long leaseAgreementTimeoutTtlMs;
@@ -136,23 +140,20 @@ public class RabbitMqConfiguration {
         template.setConfirmCallback((correlationData, ack, cause) -> {
             String cid = correlationData == null ? null : correlationData.getId();
             if (ack) {
-                org.slf4j.LoggerFactory.getLogger(RabbitMqConfiguration.class)
-                        .info("[MQ-CONFIRM] ack=true correlationId={}", cid);
+                log.debug("[MQ-CONFIRM] ack=true correlationId={}", cid);
             } else {
-                org.slf4j.LoggerFactory.getLogger(RabbitMqConfiguration.class)
-                        .warn("[MQ-CONFIRM] ack=false correlationId={} cause={}", cid, cause);
+                log.warn("[MQ-CONFIRM] ack=false correlationId={} cause={}", cid, cause);
             }
         });
 
-        template.setReturnsCallback((ReturnedMessage returned) -> {
-            org.slf4j.LoggerFactory.getLogger(RabbitMqConfiguration.class)
-                    .warn("[MQ-RETURN] replyCode={} replyText={} exchange={} routingKey={} messageId={}",
-                            returned.getReplyCode(),
-                            returned.getReplyText(),
-                            returned.getExchange(),
-                            returned.getRoutingKey(),
-                            returned.getMessage() == null ? null : returned.getMessage().getMessageProperties().getMessageId());
-        });
+        template.setReturnsCallback((ReturnedMessage returned) -> log.warn(
+                "[MQ-RETURN] replyCode={} replyText={} exchange={} routingKey={} messageId={}",
+                returned.getReplyCode(),
+                returned.getReplyText(),
+                returned.getExchange(),
+                returned.getRoutingKey(),
+                returned.getMessage() == null ? null : returned.getMessage().getMessageProperties().getMessageId()
+        ));
 
         return template;
     }

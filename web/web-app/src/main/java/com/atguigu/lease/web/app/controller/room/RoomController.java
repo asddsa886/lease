@@ -2,6 +2,7 @@ package com.atguigu.lease.web.app.controller.room;
 
 
 import com.atguigu.lease.common.result.Result;
+import com.atguigu.lease.common.utils.PageParamUtils;
 import com.atguigu.lease.web.app.service.RoomInfoService;
 import com.atguigu.lease.web.app.vo.room.RoomDetailVo;
 import com.atguigu.lease.web.app.vo.room.RoomItemVo;
@@ -34,7 +35,7 @@ public class RoomController {
             @RequestParam @Min(value = 1, message = "size必须>=1") long size,
             RoomQueryVo queryVo
     ) {
-        Page<RoomItemVo> page = new Page<>(current, size);
+        Page<RoomItemVo> page = PageParamUtils.page(current, size);
         IPage<RoomItemVo> result = roomInfoService.pageItem(page, queryVo);
         return Result.ok(result);
     }
@@ -53,7 +54,7 @@ public class RoomController {
             @RequestParam @Min(value = 1, message = "size必须>=1") long size,
             @RequestParam @NotNull(message = "id不能为空") Long id
     ) {
-        Page<RoomItemVo> page = new Page<>(current, size);
+        Page<RoomItemVo> page = PageParamUtils.page(current, size);
         IPage<RoomItemVo> result = roomInfoService.pageItemByApartmentId(page, id);
         return Result.ok(result);
     }
