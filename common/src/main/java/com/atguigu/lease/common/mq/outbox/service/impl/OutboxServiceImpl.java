@@ -68,31 +68,30 @@ public class OutboxServiceImpl implements com.atguigu.lease.common.mq.outbox.ser
             return;
         }
 
-        // 只处理 NEW/FAILED
         if (msg.getStatus() != null && msg.getStatus() != OutboxMessageStatus.NEW && msg.getStatus() != OutboxMessageStatus.FAILED) {
             return;
         }
 
         int nextTry = (msg.getTryCount() == null ? 0 : msg.getTryCount()) + 1;
+        Date now = new Date();
+        int claimed = outboxMessageMapper.claimForSend(
+                outboxId,
+                OutboxMessageStatus.NEW,
+                OutboxMessageStatus.FAILED,
+                OutboxMessageStatus.SENT,
+                nextTry,
+                now
+        );
+        if (claimed < 1) {
+            return;
+        }
 
-        // correlationId 用 outboxId，便于追踪
         CorrelationData correlationData = new CorrelationData(String.valueOf(outboxId));
 
         try {
             Object payload = deserializePayload(msg);
             rabbitTemplate.convertAndSend(msg.getExchange(), msg.getRoutingKey(), payload, correlationData);
 
-            // 标记 SENT（表示已发出，等待 broker confirm）
-            OutboxMessage toUpdate = new OutboxMessage();
-            toUpdate.setId(outboxId);
-            toUpdate.setStatus(OutboxMessageStatus.SENT);
-            toUpdate.setTryCount(nextTry);
-            toUpdate.setLastError(null);
-            toUpdate.setNextRetryAt(null);
-            toUpdate.setUpdateTime(new Date());
-            outboxMessageMapper.updateById(toUpdate);
-
-            // 等待 confirm（演示：同步等待最多 3s）
             boolean ack = correlationData.getFuture().get(3000, java.util.concurrent.TimeUnit.MILLISECONDS).isAck();
             if (ack) {
                 OutboxMessage acked = new OutboxMessage();
@@ -130,7 +129,6 @@ public class OutboxServiceImpl implements com.atguigu.lease.common.mq.outbox.ser
     }
 
     private static Duration backoff(int tryCount) {
-        // 简单指数退避：1s, 2s, 4s, 8s... 最大 60s
         long sec = Math.min(60, 1L << Math.min(tryCount, 6));
         return Duration.ofSeconds(sec);
     }

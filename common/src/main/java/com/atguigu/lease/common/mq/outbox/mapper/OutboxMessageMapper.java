@@ -15,4 +15,11 @@ public interface OutboxMessageMapper extends BaseMapper<OutboxMessage> {
      */
     List<OutboxMessage> listPending(@Param("now") Date now,
                                    @Param("limit") int limit);
+
+    int claimForSend(@Param("id") Long id,
+                     @Param("newStatus") int newStatus,
+                     @Param("failedStatus") int failedStatus,
+                     @Param("sentStatus") int sentStatus,
+                     @Param("tryCount") int tryCount,
+                     @Param("updateTime") Date updateTime);
 }

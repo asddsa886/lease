@@ -25,4 +25,17 @@
         LIMIT #{limit}
     </select>
 
+    <update id="claimForSend">
+        UPDATE outbox_message
+        SET
+            status = #{sentStatus},
+            try_count = #{tryCount},
+            last_error = NULL,
+            next_retry_at = NULL,
+            update_time = #{updateTime}
+        WHERE
+            id = #{id}
+            AND status IN (#{newStatus}, #{failedStatus})
+    </update>
+
 </mapper>
