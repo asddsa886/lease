@@ -16,7 +16,9 @@ public class StringToBaseEnumConverterFactory implements ConverterFactory<String
                     return enumConstant;
                 }
             }
-            throw new IllegalArgumentException("No enum constant 非法 " + targetType.getCanonicalName() + " with code " + code);
+            throw new IllegalArgumentException(
+                    "No enum constant " + targetType.getCanonicalName() + " with code " + code
+            );
         };
     }
 }
