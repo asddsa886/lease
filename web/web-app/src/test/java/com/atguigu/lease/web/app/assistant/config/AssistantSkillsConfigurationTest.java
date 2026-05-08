@@ -19,11 +19,15 @@ class AssistantSkillsConfigurationTest {
             assertThat(context).hasSingleBean(SkillRegistry.class);
             assertThat(context).hasSingleBean(SkillPromptAugmentAdvisor.class);
             SkillRegistry skillRegistry = context.getBean(SkillRegistry.class);
-            assertThat(skillRegistry.size()).isEqualTo(4);
+            assertThat(skillRegistry.size()).isEqualTo(8);
             assertThat(skillRegistry.contains("house-search")).isTrue();
             assertThat(skillRegistry.contains("appointment-service")).isTrue();
             assertThat(skillRegistry.contains("lease-order")).isTrue();
             assertThat(skillRegistry.contains("knowledge-qa")).isTrue();
+            assertThat(skillRegistry.contains("supervisor-routing")).isTrue();
+            assertThat(skillRegistry.contains("housing-advisor")).isTrue();
+            assertThat(skillRegistry.contains("order-service")).isTrue();
+            assertThat(skillRegistry.contains("customer-support")).isTrue();
             assertThat(skillRegistry.readSkillContent("house-search")).contains("searchRooms");
         });
     }

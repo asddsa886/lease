@@ -3,7 +3,7 @@ package com.atguigu.lease.web.app.assistant.config;
 import com.atguigu.lease.web.app.assistant.service.chat.AppAssistantService;
 import com.atguigu.lease.web.app.assistant.service.chat.AssistantPromptService;
 import com.atguigu.lease.web.app.assistant.service.chat.DisabledAssistantService;
-import com.atguigu.lease.web.app.assistant.service.chat.OfficialSkillsAssistantService;
+import com.atguigu.lease.web.app.assistant.service.chat.SupervisorAgentAssistantService;
 import com.atguigu.lease.web.app.assistant.service.memory.RedisAssistantLongTermMemoryService;
 import com.atguigu.lease.web.app.assistant.service.session.RedisAssistantConversationSessionService;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantAppointmentTools;
@@ -38,7 +38,7 @@ class AssistantConfigurationTest {
                 .withBean(ChatModel.class, () -> mock(ChatModel.class))
                 .run(context -> {
                     assertThat(context).hasSingleBean(AppAssistantService.class);
-                    assertThat(context.getBean(AppAssistantService.class)).isInstanceOf(OfficialSkillsAssistantService.class);
+                    assertThat(context.getBean(AppAssistantService.class)).isInstanceOf(SupervisorAgentAssistantService.class);
                 });
     }
 
