@@ -2,21 +2,20 @@ package com.atguigu.lease.web.app.assistant.service.agent;
 
 import com.atguigu.lease.web.app.assistant.dto.AssistantNextAction;
 import com.atguigu.lease.web.app.assistant.service.chat.AssistantPromptService;
-import org.springframework.ai.chat.client.ChatClient;
 
 import java.util.List;
 
-public class CustomerSupportSpecialist extends AbstractRoleBoundAssistantSpecialist {
+public class CustomerSupportSpecialistAgent extends AbstractSpecialistAgent {
 
-    public CustomerSupportSpecialist(ChatClient chatClient,
-                                     AssistantPromptService promptService,
-                                     AssistantSkillTemplateService skillTemplateService) {
-        super(chatClient, promptService, skillTemplateService);
+    public CustomerSupportSpecialistAgent(AgentChatClientFactory chatClientFactory,
+                                          AssistantPromptService promptService,
+                                          AssistantSkillTemplateService skillTemplateService) {
+        super(chatClientFactory, promptService, skillTemplateService);
     }
 
     @Override
-    public AssistantSpecialistType type() {
-        return AssistantSpecialistType.CUSTOMER_SUPPORT;
+    public SpecialistAgentType type() {
+        return SpecialistAgentType.CUSTOMER_SUPPORT;
     }
 
     @Override
@@ -27,7 +26,7 @@ public class CustomerSupportSpecialist extends AbstractRoleBoundAssistantSpecial
     @Override
     protected String roleInstructions() {
         return """
-                你当前扮演客服说明专员。
+                你当前扮演客服说明 Agent。
                 - 你的核心目标是解释平台规则、签约流程、预约说明、订单超时与常见问题。
                 - 优先使用知识库检索，不要把规则说明伪装成实时业务状态。
                 - 如果用户问题同时提到当前订单或预约状态，可以在说明前补充真实上下文，但最终重点仍是规则解释和流程引导。

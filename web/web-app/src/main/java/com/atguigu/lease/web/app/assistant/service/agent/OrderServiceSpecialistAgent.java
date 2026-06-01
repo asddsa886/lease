@@ -2,21 +2,20 @@ package com.atguigu.lease.web.app.assistant.service.agent;
 
 import com.atguigu.lease.web.app.assistant.dto.AssistantNextAction;
 import com.atguigu.lease.web.app.assistant.service.chat.AssistantPromptService;
-import org.springframework.ai.chat.client.ChatClient;
 
 import java.util.List;
 
-public class OrderServiceSpecialist extends AbstractRoleBoundAssistantSpecialist {
+public class OrderServiceSpecialistAgent extends AbstractSpecialistAgent {
 
-    public OrderServiceSpecialist(ChatClient chatClient,
-                                  AssistantPromptService promptService,
-                                  AssistantSkillTemplateService skillTemplateService) {
-        super(chatClient, promptService, skillTemplateService);
+    public OrderServiceSpecialistAgent(AgentChatClientFactory chatClientFactory,
+                                       AssistantPromptService promptService,
+                                       AssistantSkillTemplateService skillTemplateService) {
+        super(chatClientFactory, promptService, skillTemplateService);
     }
 
     @Override
-    public AssistantSpecialistType type() {
-        return AssistantSpecialistType.ORDER_SERVICE;
+    public SpecialistAgentType type() {
+        return SpecialistAgentType.ORDER_SERVICE;
     }
 
     @Override
@@ -27,7 +26,7 @@ public class OrderServiceSpecialist extends AbstractRoleBoundAssistantSpecialist
     @Override
     protected String roleInstructions() {
         return """
-                你当前扮演订单服务专员。
+                你当前扮演订单服务 Agent。
                 - 你的核心目标是查询、解释和处理与签约订单、支付、取消、租约相关的问题。
                 - 涉及实时订单状态时，优先调用订单工具，不得编造状态、金额、日期或编号。
                 - 如果用户问题同时带有规则解释色彩，也先给出实时状态，再提示相关规则说明。

@@ -1,10 +1,14 @@
 package com.atguigu.lease.web.app.assistant.config;
 
+import lombok.Getter;
+import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
 
 @ConfigurationProperties(prefix = "lease.assistant")
+@Getter
+@Setter
 public class AssistantProperties {
 
     private boolean enabled;
@@ -14,36 +18,4 @@ public class AssistantProperties {
     private int maxHistoryMessages = 12;
 
     private Duration streamTimeout = Duration.ofMinutes(2);
-
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-    }
-
-    public Duration getConversationTtl() {
-        return conversationTtl;
-    }
-
-    public void setConversationTtl(Duration conversationTtl) {
-        this.conversationTtl = conversationTtl;
-    }
-
-    public int getMaxHistoryMessages() {
-        return maxHistoryMessages;
-    }
-
-    public void setMaxHistoryMessages(int maxHistoryMessages) {
-        this.maxHistoryMessages = maxHistoryMessages;
-    }
-
-    public Duration getStreamTimeout() {
-        return streamTimeout;
-    }
-
-    public void setStreamTimeout(Duration streamTimeout) {
-        this.streamTimeout = streamTimeout;
-    }
 }

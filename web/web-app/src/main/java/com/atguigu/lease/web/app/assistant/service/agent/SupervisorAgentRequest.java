@@ -6,12 +6,12 @@ import com.atguigu.lease.web.app.assistant.service.tool.AssistantToolEventEmitte
 
 import java.util.List;
 
-public record AssistantSpecialistRequest(
+public record SupervisorAgentRequest(
         LoginUser currentUser,
         String conversationId,
         String userMessage,
         List<AssistantConversationMessage> history,
-        String extraInstructions,
+        String longTermMemoryPrompt,
         AssistantToolEventEmitter toolEventEmitter
 ) {
 }

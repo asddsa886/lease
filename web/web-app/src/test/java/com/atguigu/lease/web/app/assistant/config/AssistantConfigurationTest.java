@@ -11,6 +11,7 @@ import com.atguigu.lease.web.app.assistant.service.tool.AssistantBrowsingHistory
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantKnowledgeTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantLeaseOrderTools;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantRoomTools;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -29,6 +30,7 @@ class AssistantConfigurationTest {
             .withBean(AssistantAppointmentTools.class, () -> mock(AssistantAppointmentTools.class))
             .withBean(AssistantKnowledgeTools.class, () -> mock(AssistantKnowledgeTools.class))
             .withBean(RedisAssistantLongTermMemoryService.class, () -> mock(RedisAssistantLongTermMemoryService.class))
+            .withBean(ObjectMapper.class, ObjectMapper::new)
             .withBean(AssistantLeaseOrderTools.class, () -> mock(AssistantLeaseOrderTools.class));
 
     @Test

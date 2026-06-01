@@ -2,9 +2,7 @@ package com.atguigu.lease.web.app.assistant.service.agent;
 
 import com.atguigu.lease.web.app.assistant.dto.AssistantNextAction;
 import com.atguigu.lease.web.app.assistant.service.chat.AssistantPromptService;
-import com.atguigu.lease.web.app.assistant.service.session.AssistantConversationMessage;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantToolContextSupport;
-import com.atguigu.lease.web.app.assistant.service.tool.AssistantToolEventEmitter;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
 
@@ -12,35 +10,35 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public abstract class AbstractRoleBoundAssistantSpecialist implements AssistantSpecialist {
+public abstract class AbstractSpecialistAgent implements SpecialistAgent {
 
-    private final ChatClient chatClient;
+    private final AgentChatClientFactory chatClientFactory;
     private final AssistantPromptService promptService;
     private final AssistantSkillTemplateService skillTemplateService;
 
-    protected AbstractRoleBoundAssistantSpecialist(ChatClient chatClient,
-                                                   AssistantPromptService promptService,
-                                                   AssistantSkillTemplateService skillTemplateService) {
-        this.chatClient = chatClient;
+    protected AbstractSpecialistAgent(AgentChatClientFactory chatClientFactory,
+                                      AssistantPromptService promptService,
+                                      AssistantSkillTemplateService skillTemplateService) {
+        this.chatClientFactory = chatClientFactory;
         this.promptService = promptService;
         this.skillTemplateService = skillTemplateService;
     }
 
     @Override
-    public AssistantSpecialistResult handle(AssistantSpecialistRequest request) {
-        String instructions = buildInstructions(request.extraInstructions());
+    public SpecialistAgentResult execute(SpecialistAgentRequest request) {
+        String instructions = buildInstructions(request);
         List<Message> messages = promptService.buildPromptMessages(
                 request.currentUser(),
                 request.history(),
                 request.userMessage(),
                 instructions
         );
-        String reply = chatClient.prompt()
+        String reply = chatClient().prompt()
                 .messages(messages)
                 .toolContext(buildToolContext(request))
                 .call()
                 .content();
-        return new AssistantSpecialistResult(type(), reply, defaultNextActions());
+        return new SpecialistAgentResult(type(), reply, defaultNextActions());
     }
 
     protected abstract String skillName();
@@ -49,10 +47,20 @@ public abstract class AbstractRoleBoundAssistantSpecialist implements AssistantS
 
     protected abstract List<AssistantNextAction> defaultNextActions();
 
-    protected String buildInstructions(String extraInstructions) {
+    protected ChatClient chatClient() {
+        return chatClientFactory.getClient(type());
+    }
+
+    protected String buildInstructions(SpecialistAgentRequest request) {
         StringBuilder builder = new StringBuilder();
-        if (extraInstructions != null && !extraInstructions.isBlank()) {
-            builder.append(extraInstructions.trim()).append("\n\n");
+        if (request.longTermMemoryPrompt() != null && !request.longTermMemoryPrompt().isBlank()) {
+            builder.append(request.longTermMemoryPrompt().trim()).append("\n\n");
+        }
+        if (request.goal() != null && !request.goal().isBlank()) {
+            builder.append("当前子任务目标：\n").append(request.goal().trim()).append("\n\n");
+        }
+        if (request.sharedContext() != null && !request.sharedContext().isBlank()) {
+            builder.append("上游专员共享上下文：\n").append(request.sharedContext().trim()).append("\n\n");
         }
         String skillContent = skillTemplateService.loadSkill(skillName());
         if (!skillContent.isBlank()) {
@@ -62,7 +70,7 @@ public abstract class AbstractRoleBoundAssistantSpecialist implements AssistantS
         return builder.toString();
     }
 
-    private Map<String, Object> buildToolContext(AssistantSpecialistRequest request) {
+    private Map<String, Object> buildToolContext(SpecialistAgentRequest request) {
         Map<String, Object> context = new HashMap<>();
         context.put(AssistantToolContextSupport.CURRENT_USER_ID, request.currentUser().getId());
         context.put(AssistantToolContextSupport.CONVERSATION_ID, request.conversationId());

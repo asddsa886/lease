@@ -4,8 +4,8 @@ import com.atguigu.lease.web.app.assistant.dto.AssistantNextAction;
 
 import java.util.List;
 
-public record AssistantSpecialistResult(
-        AssistantSpecialistType type,
+public record SpecialistAgentResult(
+        SpecialistAgentType type,
         String reply,
         List<AssistantNextAction> nextActions
 ) {

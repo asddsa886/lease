@@ -5,12 +5,15 @@ import com.atguigu.lease.web.app.assistant.service.chat.AssistantPromptService;
 import com.atguigu.lease.web.app.assistant.service.chat.DisabledAssistantService;
 import com.atguigu.lease.web.app.assistant.service.chat.OfficialSkillsAssistantService;
 import com.atguigu.lease.web.app.assistant.service.chat.SupervisorAgentAssistantService;
-import com.atguigu.lease.web.app.assistant.service.agent.AssistantRoutingSupervisor;
+import com.atguigu.lease.web.app.assistant.service.agent.AgentChatClientFactory;
 import com.atguigu.lease.web.app.assistant.service.agent.AssistantSkillTemplateService;
-import com.atguigu.lease.web.app.assistant.service.agent.AssistantSpecialist;
-import com.atguigu.lease.web.app.assistant.service.agent.CustomerSupportSpecialist;
-import com.atguigu.lease.web.app.assistant.service.agent.HousingAdvisorSpecialist;
-import com.atguigu.lease.web.app.assistant.service.agent.OrderServiceSpecialist;
+import com.atguigu.lease.web.app.assistant.service.agent.CustomerSupportSpecialistAgent;
+import com.atguigu.lease.web.app.assistant.service.agent.HousingAdvisorSpecialistAgent;
+import com.atguigu.lease.web.app.assistant.service.agent.LlmSupervisorAgent;
+import com.atguigu.lease.web.app.assistant.service.agent.OrderServiceSpecialistAgent;
+import com.atguigu.lease.web.app.assistant.service.agent.SpecialistAgent;
+import com.atguigu.lease.web.app.assistant.service.agent.SupervisorAgent;
+import com.atguigu.lease.web.app.assistant.service.agent.SupervisorPlanValidator;
 import com.atguigu.lease.web.app.assistant.service.memory.RedisAssistantLongTermMemoryService;
 import com.atguigu.lease.web.app.assistant.service.session.RedisAssistantConversationSessionService;
 import com.atguigu.lease.web.app.assistant.service.tool.AssistantAppointmentTools;
@@ -30,6 +33,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.ResourceLoader;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.List;
 
@@ -44,7 +48,6 @@ public class AssistantConfiguration {
                                                    RedisAssistantConversationSessionService conversationSessionService,
                                                    AssistantProperties assistantProperties,
                                                    RedisAssistantLongTermMemoryService longTermMemoryService,
-                                                   AssistantRoutingSupervisor routingSupervisor,
                                                    AssistantRoomTools roomTools,
                                                    AssistantBrowsingHistoryTools browsingHistoryTools,
                                                    AssistantAppointmentTools appointmentTools,
@@ -52,10 +55,9 @@ public class AssistantConfiguration {
                                                    AssistantKnowledgeTools knowledgeTools,
                                                    SkillPromptAugmentAdvisor skillPromptAugmentAdvisor,
                                                    @Qualifier("assistantReadSkillToolCallback") ToolCallback readSkillToolCallback,
-                                                   ObjectProvider<List<AssistantSpecialist>> specialistsProvider) {
+                                                   ObjectProvider<SupervisorAgent> supervisorAgentProvider) {
         ChatModel chatModel = chatModelProvider.getIfAvailable();
         if (assistantProperties.isEnabled() && chatModel != null) {
-            List<AssistantSpecialist> specialists = specialistsProvider.getIfAvailable(List::of);
             AppAssistantService legacyAssistantService = buildLegacyOfficialSkillsAssistantService(
                     chatModel,
                     promptService,
@@ -70,13 +72,13 @@ public class AssistantConfiguration {
                     skillPromptAugmentAdvisor,
                     readSkillToolCallback
             );
+            SupervisorAgent supervisorAgent = supervisorAgentProvider.getIfAvailable();
             return new SupervisorAgentAssistantService(
                     promptService,
                     conversationSessionService,
                     longTermMemoryService,
                     assistantProperties,
-                    routingSupervisor,
-                    specialists,
+                    supervisorAgent,
                     legacyAssistantService
             );
         }
@@ -113,30 +115,35 @@ public class AssistantConfiguration {
 
     @Bean
     @ConditionalOnBean(ChatModel.class)
-    public ChatClient assistantChatClient(ChatModel chatModel,
-                                          AssistantRoomTools roomTools,
-                                          AssistantBrowsingHistoryTools browsingHistoryTools,
-                                          AssistantAppointmentTools appointmentTools,
-                                          AssistantLeaseOrderTools leaseOrderTools,
-                                          AssistantKnowledgeTools knowledgeTools,
-                                          SkillPromptAugmentAdvisor skillPromptAugmentAdvisor,
-                                          @Qualifier("assistantReadSkillToolCallback") ToolCallback readSkillToolCallback) {
+    public ChatClient assistantPlanningChatClient(ChatModel chatModel,
+                                                  SkillPromptAugmentAdvisor skillPromptAugmentAdvisor,
+                                                  @Qualifier("assistantReadSkillToolCallback") ToolCallback readSkillToolCallback) {
         return ChatClient.builder(chatModel)
                 .defaultAdvisors(skillPromptAugmentAdvisor)
-                .defaultTools(
-                        roomTools,
-                        browsingHistoryTools,
-                        appointmentTools,
-                        leaseOrderTools,
-                        knowledgeTools
-                )
                 .defaultToolCallbacks(readSkillToolCallback)
                 .build();
     }
 
     @Bean
-    public AssistantRoutingSupervisor assistantRoutingSupervisor() {
-        return new AssistantRoutingSupervisor();
+    @ConditionalOnBean(ChatModel.class)
+    public AgentChatClientFactory agentChatClientFactory(ChatModel chatModel,
+                                                         SkillPromptAugmentAdvisor skillPromptAugmentAdvisor,
+                                                         @Qualifier("assistantReadSkillToolCallback") ToolCallback readSkillToolCallback,
+                                                         AssistantRoomTools roomTools,
+                                                         AssistantBrowsingHistoryTools browsingHistoryTools,
+                                                         AssistantAppointmentTools appointmentTools,
+                                                         AssistantLeaseOrderTools leaseOrderTools,
+                                                         AssistantKnowledgeTools knowledgeTools) {
+        return new AgentChatClientFactory(
+                chatModel,
+                skillPromptAugmentAdvisor,
+                readSkillToolCallback,
+                roomTools,
+                browsingHistoryTools,
+                appointmentTools,
+                leaseOrderTools,
+                knowledgeTools
+        );
     }
 
     @Bean
@@ -145,26 +152,49 @@ public class AssistantConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(ChatClient.class)
-    public AssistantSpecialist housingAdvisorSpecialist(ChatClient assistantChatClient,
-                                                        AssistantPromptService promptService,
-                                                        AssistantSkillTemplateService assistantSkillTemplateService) {
-        return new HousingAdvisorSpecialist(assistantChatClient, promptService, assistantSkillTemplateService);
+    public SupervisorPlanValidator supervisorPlanValidator() {
+        return new SupervisorPlanValidator();
     }
 
     @Bean
-    @ConditionalOnBean(ChatClient.class)
-    public AssistantSpecialist orderServiceSpecialist(ChatClient assistantChatClient,
-                                                      AssistantPromptService promptService,
-                                                      AssistantSkillTemplateService assistantSkillTemplateService) {
-        return new OrderServiceSpecialist(assistantChatClient, promptService, assistantSkillTemplateService);
-    }
-
-    @Bean
-    @ConditionalOnBean(ChatClient.class)
-    public AssistantSpecialist customerSupportSpecialist(ChatClient assistantChatClient,
+    @ConditionalOnBean(ChatModel.class)
+    public SpecialistAgent housingAdvisorSpecialistAgent(AgentChatClientFactory agentChatClientFactory,
                                                          AssistantPromptService promptService,
                                                          AssistantSkillTemplateService assistantSkillTemplateService) {
-        return new CustomerSupportSpecialist(assistantChatClient, promptService, assistantSkillTemplateService);
+        return new HousingAdvisorSpecialistAgent(agentChatClientFactory, promptService, assistantSkillTemplateService);
+    }
+
+    @Bean
+    @ConditionalOnBean(ChatModel.class)
+    public SpecialistAgent orderServiceSpecialistAgent(AgentChatClientFactory agentChatClientFactory,
+                                                       AssistantPromptService promptService,
+                                                       AssistantSkillTemplateService assistantSkillTemplateService) {
+        return new OrderServiceSpecialistAgent(agentChatClientFactory, promptService, assistantSkillTemplateService);
+    }
+
+    @Bean
+    @ConditionalOnBean(ChatModel.class)
+    public SpecialistAgent customerSupportSpecialistAgent(AgentChatClientFactory agentChatClientFactory,
+                                                          AssistantPromptService promptService,
+                                                          AssistantSkillTemplateService assistantSkillTemplateService) {
+        return new CustomerSupportSpecialistAgent(agentChatClientFactory, promptService, assistantSkillTemplateService);
+    }
+
+    @Bean
+    @ConditionalOnBean(ChatModel.class)
+    public SupervisorAgent supervisorAgent(ChatClient assistantPlanningChatClient,
+                                           AssistantPromptService promptService,
+                                           AssistantSkillTemplateService assistantSkillTemplateService,
+                                           SupervisorPlanValidator supervisorPlanValidator,
+                                           ObjectProvider<List<SpecialistAgent>> specialistAgentsProvider,
+                                           ObjectMapper objectMapper) {
+        return new LlmSupervisorAgent(
+                assistantPlanningChatClient,
+                promptService,
+                assistantSkillTemplateService,
+                supervisorPlanValidator,
+                specialistAgentsProvider.getIfAvailable(List::of),
+                objectMapper
+        );
     }
 }
