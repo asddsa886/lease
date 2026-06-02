@@ -17,26 +17,30 @@ public class AssistantLeaseOrderTools extends AbstractAssistantTools {
         this.leaseOrderService = leaseOrderService;
     }
 
-    @Tool(description = "查询当前用户的签约订单列表")
+    @Tool(description = "Query the current user's lease order list.")
     public AssistantToolResult listMyLeaseOrders(ToolContext toolContext) {
         return executeTool("listMyLeaseOrders", toolContext, "签约订单列表查询成功",
                 () -> leaseOrderService.listItemByCurrentUser(currentUserId(toolContext)));
     }
 
-    @Tool(description = "根据订单ID查询当前用户的签约订单详情")
-    public AssistantToolResult getLeaseOrderDetail(@ToolParam(description = "订单ID", required = true) Long orderId,
+    @Tool(description = "Query the current user's lease order detail by order id.")
+    public AssistantToolResult getLeaseOrderDetail(@ToolParam(description = "Order id", required = true) Long orderId,
                                                    ToolContext toolContext) {
         return executeTool("getLeaseOrderDetail", toolContext, "签约订单详情查询成功",
                 () -> leaseOrderService.getDetailById(orderId, currentUserId(toolContext)));
     }
 
-    @Tool(description = "为当前用户创建签约订单")
-    public AssistantToolResult createLeaseOrder(@ToolParam(description = "房间ID", required = true) Long roomId,
-                                                @ToolParam(description = "租期ID", required = true) Long leaseTermId,
-                                                @ToolParam(description = "支付方式ID", required = true) Long paymentTypeId,
-                                                @ToolParam(description = "起租日期，按中国时区本地日期理解。支持 yyyy-MM-dd，也支持“明天”“下周一”这类自然语言。", required = true) String leaseStartDate,
-                                                @ToolParam(description = "补充说明") String additionalInfo,
+    @Tool(description = "Create a lease order for the current user. Must ask for natural-language confirmation first, then call with confirmed=true.")
+    public AssistantToolResult createLeaseOrder(@ToolParam(description = "Room id", required = true) Long roomId,
+                                                @ToolParam(description = "Lease term id", required = true) Long leaseTermId,
+                                                @ToolParam(description = "Payment type id", required = true) Long paymentTypeId,
+                                                @ToolParam(description = "Lease start date in China local date, yyyy-MM-dd", required = true) String leaseStartDate,
+                                                @ToolParam(description = "Additional notes") String additionalInfo,
+                                                @ToolParam(description = "Only true after the user clearly confirms this write action in natural language", required = true) Boolean confirmed,
                                                 ToolContext toolContext) {
+        if (!Boolean.TRUE.equals(confirmed)) {
+            return AssistantToolResult.fail("请先让用户明确确认创建签约订单，再调用 createLeaseOrder");
+        }
         return executeTool("createLeaseOrder", toolContext, "签约订单创建成功", () -> {
             Long userId = currentUserId(toolContext);
             LeaseOrderSubmitVo submitVo = new LeaseOrderSubmitVo();
@@ -52,9 +56,13 @@ public class AssistantLeaseOrderTools extends AbstractAssistantTools {
         });
     }
 
-    @Tool(description = "取消当前用户的待处理签约订单")
-    public AssistantToolResult cancelLeaseOrder(@ToolParam(description = "订单ID", required = true) Long orderId,
+    @Tool(description = "Cancel the current user's pending lease order. Must ask for natural-language confirmation first, then call with confirmed=true.")
+    public AssistantToolResult cancelLeaseOrder(@ToolParam(description = "Order id", required = true) Long orderId,
+                                                @ToolParam(description = "Only true after the user clearly confirms this write action in natural language", required = true) Boolean confirmed,
                                                 ToolContext toolContext) {
+        if (!Boolean.TRUE.equals(confirmed)) {
+            return AssistantToolResult.fail("请先让用户明确确认取消签约订单，再调用 cancelLeaseOrder");
+        }
         return executeTool("cancelLeaseOrder", toolContext, "签约订单取消成功", () -> {
             Long userId = currentUserId(toolContext);
             leaseOrderService.cancelById(orderId, userId);

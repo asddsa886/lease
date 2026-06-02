@@ -27,17 +27,21 @@ public class AssistantAppointmentTools extends AbstractAssistantTools {
         this.userInfoService = userInfoService;
     }
 
-    @Tool(description = "查询当前用户的预约列表")
+    @Tool(description = "Query the current user's appointment list.")
     public AssistantToolResult listMyAppointments(ToolContext toolContext) {
         return executeTool("listMyAppointments", toolContext, "预约列表查询成功",
                 () -> toAppointmentItems(viewAppointmentService.getDetailByUserId(currentUserId(toolContext))));
     }
 
-    @Tool(description = "为当前用户创建看房预约")
-    public AssistantToolResult createAppointment(@ToolParam(description = "公寓ID", required = true) Long apartmentId,
-                                                 @ToolParam(description = "预约时间，按中国时区本地时间理解。支持 yyyy-MM-dd HH:mm:ss，也支持“明天下午12点”“周六下午3点”这类自然语言，禁止转换成 UTC。", required = true) String appointmentTime,
-                                                 @ToolParam(description = "补充说明") String additionalInfo,
+    @Tool(description = "Create a viewing appointment for the current user. Must ask for natural-language confirmation first, then call with confirmed=true.")
+    public AssistantToolResult createAppointment(@ToolParam(description = "Apartment id", required = true) Long apartmentId,
+                                                 @ToolParam(description = "Appointment time in China local time, yyyy-MM-dd HH:mm:ss or natural language already parsed by the assistant", required = true) String appointmentTime,
+                                                 @ToolParam(description = "Additional notes") String additionalInfo,
+                                                 @ToolParam(description = "Only true after the user clearly confirms this write action in natural language", required = true) Boolean confirmed,
                                                  ToolContext toolContext) {
+        if (!Boolean.TRUE.equals(confirmed)) {
+            return AssistantToolResult.fail("请先让用户明确确认预约操作，再调用 createAppointment");
+        }
         return executeTool("createAppointment", toolContext, "预约创建成功", () -> {
             Long userId = currentUserId(toolContext);
             UserInfo userInfo = userInfoService.getById(userId);
@@ -57,17 +61,25 @@ public class AssistantAppointmentTools extends AbstractAssistantTools {
         });
     }
 
-    @Tool(description = "取消当前用户的预约")
-    public AssistantToolResult cancelAppointment(@ToolParam(description = "预约ID", required = true) Long appointmentId,
+    @Tool(description = "Cancel the current user's appointment. Must ask for natural-language confirmation first, then call with confirmed=true.")
+    public AssistantToolResult cancelAppointment(@ToolParam(description = "Appointment id", required = true) Long appointmentId,
+                                                 @ToolParam(description = "Only true after the user clearly confirms this write action in natural language", required = true) Boolean confirmed,
                                                  ToolContext toolContext) {
+        if (!Boolean.TRUE.equals(confirmed)) {
+            return AssistantToolResult.fail("请先让用户明确确认取消预约操作，再调用 cancelAppointment");
+        }
         return executeTool("cancelAppointment", toolContext, "预约取消成功",
                 () -> toAppointmentRecord(viewAppointmentService.cancelForCurrentUser(appointmentId, currentUserId(toolContext))));
     }
 
-    @Tool(description = "修改当前用户的预约时间")
-    public AssistantToolResult rescheduleAppointment(@ToolParam(description = "预约ID", required = true) Long appointmentId,
-                                                     @ToolParam(description = "新的预约时间，按中国时区本地时间理解。支持 yyyy-MM-dd HH:mm:ss，也支持“明天下午12点”“周六下午3点”这类自然语言，禁止转换成 UTC。", required = true) String appointmentTime,
+    @Tool(description = "Reschedule the current user's appointment. Must ask for natural-language confirmation first, then call with confirmed=true.")
+    public AssistantToolResult rescheduleAppointment(@ToolParam(description = "Appointment id", required = true) Long appointmentId,
+                                                     @ToolParam(description = "New appointment time in China local time", required = true) String appointmentTime,
+                                                     @ToolParam(description = "Only true after the user clearly confirms this write action in natural language", required = true) Boolean confirmed,
                                                      ToolContext toolContext) {
+        if (!Boolean.TRUE.equals(confirmed)) {
+            return AssistantToolResult.fail("请先让用户明确确认改期预约操作，再调用 rescheduleAppointment");
+        }
         return executeTool("rescheduleAppointment", toolContext, "预约改期成功",
                 () -> toAppointmentRecord(viewAppointmentService.rescheduleForCurrentUser(
                         appointmentId,

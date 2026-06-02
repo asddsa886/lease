@@ -1,29 +1,20 @@
 ---
 name: order-service
-description: 面向签约订单、支付、取消、租约状态等交易场景，优先基于真实订单数据给出说明与建议。
+description: Handle appointment and lease-order workflows with real tools and safe confirmation before writes.
 ---
 
-# 订单服务技能
-## 适用场景
+# Order Service
 
-- 用户查询自己的签约订单
-- 用户询问订单状态、支付进度、取消结果
-- 用户需要围绕订单做下一步操作说明
+## Use Cases
 
-## 业务规则
+- Query current user's appointments or lease orders.
+- Create, cancel, or reschedule appointments after confirmation.
+- Create or cancel lease orders after confirmation.
+- Explain order or appointment next steps; route policy-only questions to customer support when needed.
 
-- 涉及实时订单状态时，必须优先调用订单工具
-- 如果同时带有规则解释问题，先给真实订单状态，再补规则说明
-- 创建、取消等动作执行成功后，要明确复述最终结果
-- 如果用户问题更像平台规则说明，应转给 `customer-support`
+## Safety Rules
 
-## 输出要求
-
-- 先给当前状态或结果
-- 再给简要原因或补充说明
-- 最后给下一步建议
-
-## 禁止行为
-
-- 不要编造订单状态、金额、日期、订单号
-- 不要在用户未明确授权或工具不支持时主动执行高风险动作
+- Query tools can run directly.
+- Write tools require natural-language confirmation and must be called with `confirmed=true` only after that confirmation.
+- If the user says "book the first one" or "place an order for this" without explicit confirmation, summarize the target and ask for confirmation first.
+- Do not invent order status, amount, dates, appointment state, or order number.

@@ -5,6 +5,9 @@ import com.atguigu.lease.common.result.Result;
 import com.atguigu.lease.model.entity.RoomInfo;
 import com.atguigu.lease.model.enums.ReleaseStatus;
 import com.atguigu.lease.web.admin.service.RoomInfoService;
+import com.atguigu.lease.web.admin.service.RoomMetricsService;
+import com.atguigu.lease.web.admin.vo.metrics.RoomFunnelVo;
+import com.atguigu.lease.web.admin.vo.metrics.RoomQualityScoreVo;
 import com.atguigu.lease.web.admin.vo.room.RoomDetailVo;
 import com.atguigu.lease.web.admin.vo.room.RoomItemVo;
 import com.atguigu.lease.web.admin.vo.room.RoomQueryVo;
@@ -17,8 +20,10 @@ import com.atguigu.lease.common.utils.PageParamUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Tag(name = "房间信息管理")
@@ -27,6 +32,9 @@ import java.util.List;
 public class RoomController {
     @Autowired
     private RoomInfoService service;
+
+    @Autowired
+    private RoomMetricsService roomMetricsService;
 
     @Operation(summary = "保存或更新房间信息")
     @PostMapping("saveOrUpdate")
@@ -81,6 +89,23 @@ public class RoomController {
         return Result.ok(list);
     }
 
+    @Operation(summary = "分页查询房源质量分")
+    @GetMapping("metrics/quality/page")
+    public Result<IPage<RoomQualityScoreVo>> pageQualityScore(@RequestParam(required = false) Long current,
+                                                              @RequestParam(required = false) Long size,
+                                                              @RequestParam(required = false) Long apartmentId) {
+        Page<RoomQualityScoreVo> page = new Page<>(PageParamUtils.current(current), PageParamUtils.size(size));
+        return Result.ok(roomMetricsService.pageQualityScore(page, apartmentId));
+    }
+
+    @Operation(summary = "查询房源转化漏斗")
+    @GetMapping("metrics/funnel")
+    public Result<RoomFunnelVo> getFunnel(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) Long apartmentId) {
+        return Result.ok(roomMetricsService.getFunnel(startDate, endDate, apartmentId));
+    }
 }
 
 

@@ -41,6 +41,10 @@ public class SupervisorPlanValidator {
             throw new IllegalArgumentException("Order-sensitive request must include order-service agent");
         }
 
+        if (requiresHousingAgent(userMessage) && !seen.contains(SpecialistAgentType.HOUSING_ADVISOR)) {
+            throw new IllegalArgumentException("Housing-sensitive request must include housing-advisor agent");
+        }
+
         SupervisorClarification clarification = null;
         if (plan.isNeedsClarification()) {
             String question = plan.getClarificationQuestion();
@@ -64,6 +68,16 @@ public class SupervisorPlanValidator {
         String normalized = userMessage.trim().replace(" ", "").toLowerCase(Locale.ROOT);
         return containsAny(normalized,
                 "订单", "签约订单", "取消订单", "支付订单", "订单状态", "租约状态", "我的订单");
+    }
+
+    private boolean requiresHousingAgent(String userMessage) {
+        if (userMessage == null || userMessage.isBlank()) {
+            return false;
+        }
+        String normalized = userMessage.trim().replace(" ", "").toLowerCase(Locale.ROOT);
+        return containsAny(normalized,
+                "房源", "房间", "推荐", "对比", "收藏", "租金", "公寓",
+                "room", "housing", "recommend", "compare", "favorite");
     }
 
     private boolean containsAny(String text, String... keywords) {

@@ -15,6 +15,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AssistantAppointmentToolsTest {
@@ -42,7 +44,7 @@ class AssistantAppointmentToolsTest {
                 AssistantToolContextSupport.TOOL_EVENT_EMITTER, AssistantToolEventEmitter.noop()
         ));
 
-        AssistantToolResult result = tools.createAppointment(9L, "2026-04-21 12:00:00", "测试预约", toolContext);
+        AssistantToolResult result = tools.createAppointment(9L, "2026-04-21 12:00:00", "测试预约", true, toolContext);
 
         assertThat(result.isSuccess()).isTrue();
         assertThat(result.getData()).isInstanceOf(Map.class);
@@ -51,5 +53,22 @@ class AssistantAppointmentToolsTest {
         assertThat(data.get("appointmentId")).isEqualTo(100L);
         assertThat(data.get("appointmentTime")).isEqualTo("2026-04-21 12:00:00");
         assertThat(data.get("appointmentStatus")).isEqualTo(AppointmentStatus.WAITING.getName());
+    }
+
+    @Test
+    void shouldRejectCreateAppointmentWithoutNaturalLanguageConfirmation() {
+        ViewAppointmentService viewAppointmentService = mock(ViewAppointmentService.class);
+        UserInfoService userInfoService = mock(UserInfoService.class);
+        AssistantAppointmentTools tools = new AssistantAppointmentTools(viewAppointmentService, userInfoService);
+        ToolContext toolContext = new ToolContext(Map.of(
+                AssistantToolContextSupport.CURRENT_USER_ID, 8L,
+                AssistantToolContextSupport.TOOL_EVENT_EMITTER, AssistantToolEventEmitter.noop()
+        ));
+
+        AssistantToolResult result = tools.createAppointment(9L, "2026-04-21 12:00:00", "测试预约", false, toolContext);
+
+        assertThat(result.isSuccess()).isFalse();
+        assertThat(result.getMessage()).contains("确认");
+        verify(viewAppointmentService, never()).saveOrUpdateForCurrentUser(any(ViewAppointment.class), eq(8L));
     }
 }

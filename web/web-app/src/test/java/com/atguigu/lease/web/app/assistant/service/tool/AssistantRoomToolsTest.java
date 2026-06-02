@@ -7,6 +7,8 @@ import com.atguigu.lease.web.app.service.CityInfoService;
 import com.atguigu.lease.web.app.service.DistrictInfoService;
 import com.atguigu.lease.web.app.service.PaymentTypeService;
 import com.atguigu.lease.web.app.service.ProvinceInfoService;
+import com.atguigu.lease.web.app.service.RoomCompareService;
+import com.atguigu.lease.web.app.service.RoomFavoriteService;
 import com.atguigu.lease.web.app.service.RoomInfoService;
 import com.atguigu.lease.web.app.vo.apartment.ApartmentDetailVo;
 import com.atguigu.lease.web.app.vo.room.RoomItemVo;
@@ -35,6 +37,8 @@ class AssistantRoomToolsTest {
     private final CityInfoService cityInfoService = mock(CityInfoService.class);
     private final DistrictInfoService districtInfoService = mock(DistrictInfoService.class);
     private final PaymentTypeService paymentTypeService = mock(PaymentTypeService.class);
+    private final RoomCompareService roomCompareService = mock(RoomCompareService.class);
+    private final RoomFavoriteService roomFavoriteService = mock(RoomFavoriteService.class);
 
     private final AssistantRoomTools assistantRoomTools = new AssistantRoomTools(
             apartmentInfoService,
@@ -42,7 +46,9 @@ class AssistantRoomToolsTest {
             provinceInfoService,
             cityInfoService,
             districtInfoService,
-            paymentTypeService
+            paymentTypeService,
+            roomCompareService,
+            roomFavoriteService
     );
 
     @Test

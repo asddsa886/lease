@@ -3,6 +3,7 @@ package com.atguigu.lease.web.app.service.impl;
 import com.atguigu.lease.common.cache.HotDataCacheHelper;
 import com.atguigu.lease.common.constant.RedisConstant.RedisConstant;
 import com.atguigu.lease.common.exception.LeaseException;
+import com.atguigu.lease.common.login.LoginUser;
 import com.atguigu.lease.common.login.LoginUserHolder;
 import com.atguigu.lease.common.result.ResultCodeEnum;
 import com.atguigu.lease.model.entity.ApartmentInfo;
@@ -21,6 +22,7 @@ import com.atguigu.lease.web.app.mapper.LeaseTermMapper;
 import com.atguigu.lease.web.app.mapper.PaymentTypeMapper;
 import com.atguigu.lease.web.app.mapper.RoomInfoMapper;
 import com.atguigu.lease.web.app.service.BrowsingHistoryService;
+import com.atguigu.lease.web.app.service.RoomFavoriteService;
 import com.atguigu.lease.web.app.service.RoomInfoService;
 import com.atguigu.lease.web.app.vo.apartment.ApartmentItemVo;
 import com.atguigu.lease.web.app.vo.attr.AttrValueVo;
@@ -39,6 +41,8 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * @author liubo
@@ -78,11 +82,16 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
     private BrowsingHistoryService browsingHistoryService;
 
     @Autowired
+    private RoomFavoriteService roomFavoriteService;
+
+    @Autowired
     private HotDataCacheHelper hotDataCacheHelper;
 
     @Override
     public IPage<RoomItemVo> pageItem(Page<RoomItemVo> page, RoomQueryVo queryVo) {
-        return roomInfoMapper.pageItem(page, queryVo);
+        IPage<RoomItemVo> result = roomInfoMapper.pageItem(page, queryVo);
+        fillFavoriteStatus(result.getRecords());
+        return result;
     }
 
     @Override
@@ -102,11 +111,14 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
             throw new LeaseException(ResultCodeEnum.DATA_ERROR);
         }
 
+        RoomDetailVo responseVo = copyRoomDetail(roomDetailVo);
+        fillFavoriteStatus(responseVo);
+
         // User-side behavior like browsing history should stay outside the cached payload.
         if (LoginUserHolder.get() != null) {
             browsingHistoryService.saveHistory(LoginUserHolder.get().getId(), id);
         }
-        return roomDetailVo;
+        return responseVo;
     }
 
     private RoomDetailVo loadRoomDetailOrNull(Long id) {
@@ -153,6 +165,41 @@ public class RoomInfoServiceImpl extends ServiceImpl<RoomInfoMapper, RoomInfo>
 
     @Override
     public IPage<RoomItemVo> pageItemByApartmentId(Page<RoomItemVo> page, Long id) {
-        return roomInfoMapper.pageItemByApartmentId(page, id);
+        IPage<RoomItemVo> result = roomInfoMapper.pageItemByApartmentId(page, id);
+        fillFavoriteStatus(result.getRecords());
+        return result;
+    }
+
+    private void fillFavoriteStatus(List<RoomItemVo> records) {
+        if (records == null || records.isEmpty()) {
+            return;
+        }
+        LoginUser currentUser = LoginUserHolder.get();
+        if (currentUser == null || currentUser.getId() == null) {
+            records.forEach(record -> record.setIsFavorite(false));
+            return;
+        }
+
+        List<Long> roomIds = records.stream()
+                .map(RoomItemVo::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Set<Long> favoriteRoomIds = roomFavoriteService.favoriteRoomIds(currentUser.getId(), roomIds);
+        records.forEach(record -> record.setIsFavorite(favoriteRoomIds.contains(record.getId())));
+    }
+
+    private void fillFavoriteStatus(RoomDetailVo roomDetailVo) {
+        LoginUser currentUser = LoginUserHolder.get();
+        boolean favorite = currentUser != null
+                && currentUser.getId() != null
+                && roomFavoriteService.isFavorite(currentUser.getId(), roomDetailVo.getId());
+        roomDetailVo.setIsFavorite(favorite);
+    }
+
+    private RoomDetailVo copyRoomDetail(RoomDetailVo source) {
+        RoomDetailVo copy = new RoomDetailVo();
+        BeanUtils.copyProperties(source, copy);
+        return copy;
     }
 }

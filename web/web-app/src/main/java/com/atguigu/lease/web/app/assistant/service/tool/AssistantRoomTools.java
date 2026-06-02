@@ -9,7 +9,10 @@ import com.atguigu.lease.web.app.service.CityInfoService;
 import com.atguigu.lease.web.app.service.DistrictInfoService;
 import com.atguigu.lease.web.app.service.PaymentTypeService;
 import com.atguigu.lease.web.app.service.ProvinceInfoService;
+import com.atguigu.lease.web.app.service.RoomCompareService;
+import com.atguigu.lease.web.app.service.RoomFavoriteService;
 import com.atguigu.lease.web.app.service.RoomInfoService;
+import com.atguigu.lease.web.app.vo.favorite.RoomFavoriteItemVo;
 import com.atguigu.lease.web.app.vo.room.RoomItemVo;
 import com.atguigu.lease.web.app.vo.room.RoomQueryVo;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -24,6 +27,7 @@ import java.math.BigDecimal;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 @Component
@@ -35,19 +39,25 @@ public class AssistantRoomTools extends AbstractAssistantTools {
     private final CityInfoService cityInfoService;
     private final DistrictInfoService districtInfoService;
     private final PaymentTypeService paymentTypeService;
+    private final RoomCompareService roomCompareService;
+    private final RoomFavoriteService roomFavoriteService;
 
     public AssistantRoomTools(ApartmentInfoService apartmentInfoService,
                               RoomInfoService roomInfoService,
                               ProvinceInfoService provinceInfoService,
                               CityInfoService cityInfoService,
                               DistrictInfoService districtInfoService,
-                              PaymentTypeService paymentTypeService) {
+                              PaymentTypeService paymentTypeService,
+                              RoomCompareService roomCompareService,
+                              RoomFavoriteService roomFavoriteService) {
         this.apartmentInfoService = apartmentInfoService;
         this.roomInfoService = roomInfoService;
         this.provinceInfoService = provinceInfoService;
         this.cityInfoService = cityInfoService;
         this.districtInfoService = districtInfoService;
         this.paymentTypeService = paymentTypeService;
+        this.roomCompareService = roomCompareService;
+        this.roomFavoriteService = roomFavoriteService;
     }
 
     @Tool(description = "根据公寓ID查询公寓详情")
@@ -107,6 +117,44 @@ public class AssistantRoomTools extends AbstractAssistantTools {
             );
             return AssistantPageResult.from(result);
         });
+    }
+
+    @Tool(description = "收藏当前用户感兴趣的房间。只需要房间ID，收藏是幂等操作，重复收藏仍视为成功。")
+    public AssistantToolResult favoriteRoom(@ToolParam(description = "房间ID", required = true) Long roomId,
+                                            ToolContext toolContext) {
+        return executeTool("favoriteRoom", toolContext, "房间收藏成功", () -> {
+            roomFavoriteService.saveFavorite(currentUserId(toolContext), roomId);
+            return Map.of("roomId", roomId, "isFavorite", true);
+        });
+    }
+
+    @Tool(description = "取消收藏当前用户已收藏的房间。只需要房间ID，取消收藏是幂等操作。")
+    public AssistantToolResult removeFavoriteRoom(@ToolParam(description = "房间ID", required = true) Long roomId,
+                                                  ToolContext toolContext) {
+        return executeTool("removeFavoriteRoom", toolContext, "房间取消收藏成功", () -> {
+            roomFavoriteService.removeFavorite(currentUserId(toolContext), roomId);
+            return Map.of("roomId", roomId, "isFavorite", false);
+        });
+    }
+
+    @Tool(description = "分页查询当前用户收藏的房间列表")
+    public AssistantToolResult listFavoriteRooms(@ToolParam(description = "页码，默认1") Integer pageNumber,
+                                                 @ToolParam(description = "每页条数，默认10") Integer pageSize,
+                                                 ToolContext toolContext) {
+        return executeTool("listFavoriteRooms", toolContext, "收藏房间列表查询成功", () -> {
+            IPage<RoomFavoriteItemVo> result = roomFavoriteService.pageItem(
+                    new Page<>(safePageNumber(pageNumber), safePageSize(pageSize)),
+                    currentUserId(toolContext)
+            );
+            return AssistantPageResult.from(result);
+        });
+    }
+
+    @Tool(description = "临时对比多个房间。传入候选房间ID列表，工具会去重并按传入顺序返回租金、标签、配套、支付方式和租期差异。")
+    public AssistantToolResult compareRooms(@ToolParam(description = "房间ID列表", required = true) List<Long> roomIds,
+                                            ToolContext toolContext) {
+        return executeTool("compareRooms", toolContext, "房间对比成功",
+                () -> roomCompareService.compareRooms(roomIds));
     }
 
     private ResolvedRegion resolveRegion(String provinceName, String cityName, String districtName) {

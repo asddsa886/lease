@@ -46,6 +46,35 @@ class SupervisorPlanValidatorTest {
     }
 
     @Test
+    void shouldValidateRecommendationCompareAppointmentOrderChain() {
+        SupervisorPlan plan = new SupervisorPlan();
+        plan.setPrimaryAgent("housing-advisor");
+        plan.setAdditionalAgents(List.of("order-service"));
+        plan.setGoal("recommend rooms, compare them, book an appointment, then check orders");
+
+        SupervisorPlanValidator.ValidatedSupervisorPlan validated = validator.validate(
+                plan,
+                "帮我推荐三个房源，对比一下，然后预约第一个，之后查我的订单"
+        );
+
+        assertThat(validated.orderedAgents()).containsExactly(
+                SpecialistAgentType.HOUSING_ADVISOR,
+                SpecialistAgentType.ORDER_SERVICE
+        );
+    }
+
+    @Test
+    void shouldRejectCompareRequestWithoutHousingAdvisorAgent() {
+        SupervisorPlan plan = new SupervisorPlan();
+        plan.setPrimaryAgent("customer-support");
+        plan.setGoal("explain compare rules");
+
+        assertThatThrownBy(() -> validator.validate(plan, "帮我对比刚才收藏的三个房源"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Housing-sensitive");
+    }
+
+    @Test
     void shouldRejectDuplicateAgents() {
         SupervisorPlan plan = new SupervisorPlan();
         plan.setPrimaryAgent("order-service");

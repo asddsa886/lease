@@ -33,4 +33,7 @@ public class RoomItemVo {
     @Schema(description = "房间所属公寓信息")
     private ApartmentInfo apartmentInfo;
 
+    @Schema(description = "Whether current user has favorited this room")
+    private Boolean isFavorite = false;
+
 }

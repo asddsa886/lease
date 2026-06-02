@@ -38,4 +38,7 @@ public class RoomDetailVo extends RoomInfo {
     @Schema(description = "租期列表")
     private List<LeaseTerm> leaseTermList;
 
+    @Schema(description = "Whether current user has favorited this room")
+    private Boolean isFavorite = false;
+
 }

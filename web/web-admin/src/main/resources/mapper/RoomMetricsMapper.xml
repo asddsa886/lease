@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.atguigu.lease.web.admin.mapper.RoomMetricsMapper">
+
+    <select id="pageQualityScore" resultType="com.atguigu.lease.web.admin.vo.metrics.RoomQualityScoreVo">
+        select ri.id as room_id,
+               ri.room_number,
+               ri.rent,
+               ri.apartment_id,
+               ai.name as apartment_name,
+               coalesce(g.graph_count, 0) as graph_count,
+               coalesce(a.attr_count, 0) as attr_count,
+               coalesce(f.facility_count, 0) as facility_count,
+               coalesce(l.label_count, 0) as label_count,
+               coalesce(p.payment_type_count, 0) as payment_type_count,
+               coalesce(t.lease_term_count, 0) as lease_term_count,
+               coalesce(b.browse_count, 0) as browse_count,
+               coalesce(rf.favorite_count, 0) as favorite_count,
+               coalesce(va.appointment_count, 0) as appointment_count,
+               coalesce(lo.order_count, 0) as order_count
+        from room_info ri
+                 left join apartment_info ai on ri.apartment_id = ai.id and ai.is_deleted = 0
+                 left join (
+                     select item_id as room_id, count(*) as graph_count
+                     from graph_info
+                     where is_deleted = 0 and item_type = 2
+                     group by item_id
+                 ) g on g.room_id = ri.id
+                 left join (
+                     select room_id, count(*) as attr_count
+                     from room_attr_value
+                     where is_deleted = 0
+                     group by room_id
+                 ) a on a.room_id = ri.id
+                 left join (
+                     select room_id, count(*) as facility_count
+                     from room_facility
+                     where is_deleted = 0
+                     group by room_id
+                 ) f on f.room_id = ri.id
+                 left join (
+                     select room_id, count(*) as label_count
+                     from room_label
+                     where is_deleted = 0
+                     group by room_id
+                 ) l on l.room_id = ri.id
+                 left join (
+                     select room_id, count(*) as payment_type_count
+                     from room_payment_type
+                     where is_deleted = 0
+                     group by room_id
+                 ) p on p.room_id = ri.id
+                 left join (
+                     select room_id, count(*) as lease_term_count
+                     from room_lease_term
+                     where is_deleted = 0
+                     group by room_id
+                 ) t on t.room_id = ri.id
+                 left join (
+                     select room_id, count(*) as browse_count
+                     from browsing_history
+                     where is_deleted = 0
+                     group by room_id
+                 ) b on b.room_id = ri.id
+                 left join (
+                     select room_id, count(*) as favorite_count
+                     from room_favorite
+                     where is_deleted = 0
+                     group by room_id
+                 ) rf on rf.room_id = ri.id
+                 left join (
+                     select apartment_id, count(*) as appointment_count
+                     from view_appointment
+                     where is_deleted = 0
+                     group by apartment_id
+                 ) va on va.apartment_id = ri.apartment_id
+                 left join (
+                     select room_id, count(*) as order_count
+                     from lease_order
+                     where is_deleted = 0
+                     group by room_id
+                 ) lo on lo.room_id = ri.id
+        <where>
+            ri.is_deleted = 0
+            <if test="apartmentId != null">
+                and ri.apartment_id = #{apartmentId}
+            </if>
+        </where>
+        order by ri.update_time desc, ri.id desc
+    </select>
+
+    <select id="selectFunnel" resultType="com.atguigu.lease.web.admin.vo.metrics.RoomFunnelVo">
+        select
+        (
+            select count(*)
+            from browsing_history bh
+                     left join room_info ri on bh.room_id = ri.id
+            where bh.is_deleted = 0
+            <if test="apartmentId != null">
+                and ri.apartment_id = #{apartmentId}
+            </if>
+            <if test="startDate != null">
+                and bh.browse_time &gt;= #{startDate}
+            </if>
+            <if test="endDate != null">
+                and bh.browse_time &lt; date_add(#{endDate}, interval 1 day)
+            </if>
+        ) as browse_count,
+        (
+            select count(*)
+            from room_favorite rf
+                     left join room_info ri on rf.room_id = ri.id
+            where rf.is_deleted = 0
+            <if test="apartmentId != null">
+                and ri.apartment_id = #{apartmentId}
+            </if>
+            <if test="startDate != null">
+                and rf.create_time &gt;= #{startDate}
+            </if>
+            <if test="endDate != null">
+                and rf.create_time &lt; date_add(#{endDate}, interval 1 day)
+            </if>
+        ) as favorite_count,
+        (
+            select count(*)
+            from view_appointment va
+            where va.is_deleted = 0
+            <if test="apartmentId != null">
+                and va.apartment_id = #{apartmentId}
+            </if>
+            <if test="startDate != null">
+                and va.create_time &gt;= #{startDate}
+            </if>
+            <if test="endDate != null">
+                and va.create_time &lt; date_add(#{endDate}, interval 1 day)
+            </if>
+        ) as appointment_count,
+        (
+            select count(*)
+            from lease_order lo
+            where lo.is_deleted = 0
+            <if test="apartmentId != null">
+                and lo.apartment_id = #{apartmentId}
+            </if>
+            <if test="startDate != null">
+                and lo.create_time &gt;= #{startDate}
+            </if>
+            <if test="endDate != null">
+                and lo.create_time &lt; date_add(#{endDate}, interval 1 day)
+            </if>
+        ) as order_count
+    </select>
+
+</mapper>

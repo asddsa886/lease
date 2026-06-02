@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.atguigu.lease.web.app.mapper.RoomFavoriteMapper">
+
+    <resultMap id="RoomFavoriteItemVoMap" type="com.atguigu.lease.web.app.vo.favorite.RoomFavoriteItemVo" autoMapping="true">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="roomId" column="room_id"/>
+        <result property="favoriteTime" column="favorite_time"/>
+        <result property="roomNumber" column="room_number"/>
+        <result property="rent" column="rent"/>
+        <result property="apartmentId" column="apartment_id"/>
+        <result property="apartmentName" column="apartment_name"/>
+        <result property="provinceName" column="province_name"/>
+        <result property="cityName" column="city_name"/>
+        <result property="districtName" column="district_name"/>
+    </resultMap>
+
+    <select id="pageItem" resultMap="RoomFavoriteItemVoMap">
+        select rf.id,
+               rf.user_id,
+               rf.room_id,
+               rf.create_time as favorite_time,
+               ri.room_number,
+               ri.rent,
+               ri.apartment_id,
+               ai.name as apartment_name,
+               ai.province_name,
+               ai.city_name,
+               ai.district_name
+        from room_favorite rf
+                 left join room_info ri on rf.room_id = ri.id and ri.is_deleted = 0
+                 left join apartment_info ai on ri.apartment_id = ai.id and ai.is_deleted = 0
+        where rf.is_deleted = 0
+          and rf.user_id = #{userId}
+        order by rf.create_time desc
+    </select>
+
+    <select id="selectFavoriteRoomIds" resultType="java.lang.Long">
+        select room_id
+        from room_favorite
+        where is_deleted = 0
+          and user_id = #{userId}
+          and room_id in
+        <foreach collection="roomIds" item="roomId" open="(" separator="," close=")">
+            #{roomId}
+        </foreach>
+    </select>
+
+</mapper>
